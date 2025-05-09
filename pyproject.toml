@@ -1,0 +1,13 @@
+[project]
+name = "sigmapikachu"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "llama-cpp-python[server]>=0.3.9",
+    "uvicorn>=0.34.2",
+    "pystray>=0.19.0",
+    "Pillow>=9.0.0",
+    "cairosvg>=2.7.1",
+]

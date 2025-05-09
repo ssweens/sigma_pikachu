@@ -1,0 +1,40 @@
+{
+    "host": "0.0.0.0",
+    "port": 9999,
+    "models": [
+            {
+                "model": "/Users/ssweens/models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf",
+                "model_alias": "Josie",
+                "n_gpu_layers": 36,
+                "offload_kqv": true,
+                "n_threads": 24,
+                "n_ctx": 0
+            },
+            {
+                "model": "/Users/ssweens/models/gemma3-12b-claude-3.7-sonnet-reasoning-distilled.Q8_0.gguf",
+                "model_alias": "ClaudeSeek",
+                "n_gpu_layers": 36,
+                "offload_kqv": true,
+                "n_threads": 24,
+                "n_ctx": 0
+            },
+            {
+                "model": "/Users/ssweens/models/Qwen3-8B-Q8_0.gguf",
+                "model_alias": "Qwen3",
+                "n_gpu_layers": 36,
+                "offload_kqv": true,
+                "n_threads": 24,
+                "n_ctx": 0
+
+            },
+            {
+                "model": "/Users/ssweens/models/Qwen3-4B-Q8_0.gguf",
+                "model_alias": "Qwen3-4B",
+                "n_gpu_layers": 99,
+                "offload_kqv": true,
+                "n_threads": 24,
+                "n_ctx": 0
+
+            }
+    ]
+}
