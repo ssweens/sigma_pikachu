@@ -9,10 +9,25 @@ import webbrowser
 
 #import svgloader
 
-CONFIG_FILE = "config.json"
-LOG_FILE = "server.log"
-#ICON_FILE = "sigma_pikachu.png"  # We'll try to load this, but have a fallback
-ICON_FILE = "pik64x64w.png"
+# Determine where to look for external resources (config, logs, icons)
+if getattr(sys, 'frozen', False):
+    # Running as PyInstaller bundle: resources live in the temporary extraction directory
+    RESOURCE_DIR = sys._MEIPASS
+else:
+    # Running as script: resources live beside this file
+    RESOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Config and log files remain external and editable
+if getattr(sys, 'frozen', False):
+    EXTERNAL_DIR = os.path.dirname(sys.executable)
+else:
+    EXTERNAL_DIR = os.path.dirname(os.path.abspath(__file__)) + "/../"
+
+CONFIG_FILE = os.path.join(EXTERNAL_DIR, "config.json")
+LOG_FILE    = os.path.join(EXTERNAL_DIR, "server.log")
+
+# Icon file is bundled
+ICON_FILE   = os.path.join(RESOURCE_DIR, "pik64x64w.png")
 
 server_process = None
 app_icon = None
@@ -56,20 +71,15 @@ def get_server_toggle_item_text(item): # Add 'item' parameter
         return "Stop Server"
     return "Start Server"
 
-def get_server_toggle_item_action(item): # Add 'item' parameter
-    # pystray calls the action with (icon, item)
-    # Our start_server/stop_server functions expect (icon, item)
-    # So we need to ensure they are called correctly.
-    # The 'item' here is the menu item itself. 'icon' is the tray icon.
-    # We can pass None if the functions are robust to it, or pass the actual icon.
-    # For simplicity, let's assume they can handle None or we pass the global app_icon.
-    print("Server toggle action called.")
+def toggle_server(icon, item):
+    """Toggles the llama-cpp-python server on/off with debug logs."""
+    print(f"toggle_server called; server running: {is_server_running()}")
     if is_server_running():
-        # The action returned here will be called by pystray with (icon_instance, menu_item_instance)
-        return stop_server()
+        print("toggle_server: stopping server")
+        stop_server(icon, item)
     else:
-        # The action returned here will be called by pystray with (icon_instance, menu_item_instance)
-        return start_server()
+        print("toggle_server: starting server")
+        start_server(icon, item)
 
 def get_models_menu():
     config = get_config()
@@ -107,8 +117,13 @@ def start_server(icon=None, item=None): # Add default None for icon and item
         print(f"Error: {CONFIG_FILE} not found. Cannot start server.")
         return
 
+    if getattr(sys, 'frozen', False):
+        python_executable = "python3"
+    else:
+        python_executable = sys.executable
+
     command = [
-        sys.executable,
+        python_executable,
         "-m", "llama_cpp.server",
         "--config_file", CONFIG_FILE
     ]
@@ -132,7 +147,7 @@ def stop_server(icon, item):
     print(f"Stopping server (PID: {server_process.pid})...")
     try:
         server_process.terminate()
-        server_process.wait(timeout=10)
+        server_process.wait(timeout=4)
         print("Server terminated.")
     except subprocess.TimeoutExpired:
         print("Server did not terminate gracefully, killing...")
@@ -214,8 +229,7 @@ def setup_tray_icon():
     menu_items = (
         pystray.MenuItem(get_status_item_text, None, enabled=False),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem(get_server_toggle_item_text, 
-                         get_server_toggle_item_action),
+        pystray.MenuItem(get_server_toggle_item_text, toggle_server),
         pystray.MenuItem("Loaded Models", 
                          get_models_menu(), 
                          visible=get_models_item_visibility),
