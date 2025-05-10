@@ -2,28 +2,28 @@
 host: 0.0.0.0
 port: 9999
 models:
-- model: "/Volumes/RabbleFiles/Models/Qwen3-8B-Q8_0.gguf"
+- model: "/Users/ssweens/models/Qwen3-8B-Q8_0.gguf"
   model_alias: Qwen3-8B
   n_gpu_layers: 99
   offload_kqv: true
   n_threads: 32
   n_ctx: 32768
   chat_format: qwen
-- model: "/Volumes/RabbleFiles/Models/Qwen3-30B-A3B-Q4_K_M.gguf"
+- model: "/Users/ssweens/models/Qwen3-30B-A3B-Q4_K_M.gguf"
   model_alias: Qwen3-30B
   n_gpu_layers: 99
   offload_kqv: true
   n_threads: 32
   n_ctx: 32768
   chat_format: qwen
-- model: "/Volumes/RabbleFiles/Models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf"
+- model: "/Users/ssweens/models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf"
   model_alias: Josie
   n_gpu_layers: 99
   offload_kqv: true
   n_threads: 32
   n_ctx: 32768
   chat_format: qwen
-- model: "/Volumes/RabbleFiles/Models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+- model: "/Users/ssweens/models/qwen2.5-coder-7b-instruct-q8_0.gguf"
   model_alias: Qwen2.5-Coder-7B-Instruct
   n_gpu_layers: 99
   offload_kqv: true

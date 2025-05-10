@@ -19,13 +19,25 @@ else:
     # Running as script: resources live beside this file
     RESOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Config and log files remain external and editable
+# Log files remain external and editable
 if getattr(sys, 'frozen', False):
     EXTERNAL_DIR = os.path.dirname(sys.executable)
 else:
     EXTERNAL_DIR = os.path.dirname(os.path.abspath(__file__)) + "/../"
 
-CONFIG_FILE = os.path.join(EXTERNAL_DIR, "config.yaml")
+# Config files live under user directory in .config folder
+if sys.platform == "win32":
+    USER_DIR = os.path.join(os.getenv('APPDATA'), 'sigma_pikachu')
+#elif sys.platform == "darwin":
+#    USER_DIR = os.path.join(os.getenv('HOME'), 'Library', 'Application Support', 'sigma_pikachu')
+else:
+    USER_DIR = os.path.join(os.getenv('HOME'), '.config', 'sigma_pikachu')
+
+# Ensure the user directory exists
+if not os.path.exists(USER_DIR):
+    os.makedirs(USER_DIR)
+
+CONFIG_FILE = os.path.join(USER_DIR, "config.yaml")
 LOG_FILE    = os.path.join(EXTERNAL_DIR, "server.log")
 
 # Icon file is bundled
@@ -249,7 +261,7 @@ def setup_tray_icon():
                          get_models_menu(), 
                          visible=get_models_item_visibility),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Open config.json", open_config_file),
+        pystray.MenuItem("Open config.yaml", open_config_file),
         pystray.MenuItem("View Server Logs", view_logs),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", quit_application)
