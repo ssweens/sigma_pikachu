@@ -1,11 +1,13 @@
 import pystray
 from PIL import Image, ImageDraw
 import subprocess
+from io import StringIO
 import os
 import json
 import threading
 import sys
 import webbrowser
+import yaml
 
 #import svgloader
 
@@ -23,7 +25,7 @@ if getattr(sys, 'frozen', False):
 else:
     EXTERNAL_DIR = os.path.dirname(os.path.abspath(__file__)) + "/../"
 
-CONFIG_FILE = os.path.join(EXTERNAL_DIR, "config.json")
+CONFIG_FILE = os.path.join(EXTERNAL_DIR, "config.yaml")
 LOG_FILE    = os.path.join(EXTERNAL_DIR, "server.log")
 
 # Icon file is bundled
@@ -34,10 +36,17 @@ app_icon = None
 # app_exit_event removed
 
 def get_config():
-    """Loads the server configuration from config.json."""
+    """Loads the server configuration from config.yaml, converting to json."""
     try:
         with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
+            # # remove any comments from the JSON file
+            # # json.load() does not support comments, so we need to strip them out
+            # s = f.read()
+            # s = '\n'.join([line for line in s.splitlines() if not line.strip().startswith('//')])
+            # return json.load(StringIO(s))
+            y = yaml.safe_load(f)
+        if y is not None:
+            return json.loads(json.dumps(y))
     except FileNotFoundError:
         print(f"Error: {CONFIG_FILE} not found.")
         return None
@@ -115,6 +124,12 @@ def start_server(icon=None, item=None): # Add default None for icon and item
 
     if not os.path.exists(CONFIG_FILE):
         print(f"Error: {CONFIG_FILE} not found. Cannot start server.")
+        return
+    
+    # Reload config to ensure it's up-to-date
+    config = get_config()
+    if config is None:
+        print(f"Error: Could not load {CONFIG_FILE}. Cannot start server.")
         return
 
     if getattr(sys, 'frozen', False):
@@ -247,7 +262,8 @@ def setup_tray_icon():
     # Or, pystray might handle initial state correctly with functional items.
     # Let's rely on pystray's initial call to the generator functions.
     # If issues persist, a threaded initial update_menu_state_after_action() might be needed.
-
+    toggle_server(None, None) # Call to set initial state
+    
     app_icon.run() # Reverted to blocking call
 
 if __name__ == "__main__":
