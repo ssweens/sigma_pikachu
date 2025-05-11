@@ -48,3 +48,23 @@ models:
 #   offload_kqv: true
 #   n_threads: 24
 #   n_ctx: 0
+
+# Configuration for Model Context Protocol (MCP) Servers
+# Each item in the list represents an MCP server that can be managed by the application.
+mcp_servers:
+  - alias: "Sequential Thinker Example" # A user-friendly name for the tray menu
+    # The full command to run the MCP server.
+    # Ensure paths are correct and the command is runnable from your terminal.
+    # Example uses 'uvx' (from uv) and 'npx'. Adjust as needed for your environment.
+    command: "uvx mcpo --port 9000 --api-key \"YOUR_API_KEY_HERE_IF_NEEDED\" -- npx -y @modelcontextprotocol/server-sequential-thinking"
+    enabled: true # Set to true to allow starting this server, false to disable it.
+  
+  - alias: "Custom Python MCP Server Example"
+    # Example for a locally developed Python MCP server.
+    # Replace with the actual command to run your server.
+    command: "python /path/to/your/custom_mcp_server.py --port 9001"
+    enabled: false
+
+  # - alias: "Another MCP Server"
+  #   command: "some_other_command --port 9002"
+  #   enabled: false
