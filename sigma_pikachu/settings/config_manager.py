@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import subprocess
-from .constants import CONFIG_FILE, DEFAULT_HOST, DEFAULT_LLAMA_PORT
+from ..constants import CONFIG_FILE, DEFAULT_HOST, DEFAULT_LLAMA_PORT
 
 class ConfigManager:
     DEFAULT_CONFIG = {

@@ -69,3 +69,12 @@ mcp_servers:
   # - alias: "Another MCP Server"
   #   command: "some_other_command --port 9002"
   #   enabled: false
+
+# Configuration for the Socket Proxy Server
+# This server can optionally run to proxy requests, e.g., for model switching.
+proxy:
+  enabled: false # Set to true to enable the proxy server
+  listen_host: 127.0.0.1 # The host the proxy server will listen on
+  listen_port: 8888 # The port the proxy server will listen on
+  downstream_host: 127.0.0.1 # The host the proxy server will forward requests to (typically the model server)
+  downstream_port: 5000 # The port the proxy server will forward requests to (typically the model server)

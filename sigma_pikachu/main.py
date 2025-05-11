@@ -16,17 +16,17 @@ if not getattr(sys, 'frozen', False): # Not running as a PyInstaller bundle
 
 
 # Import necessary modules after path adjustments
-try:
-    from sigma_pikachu.constants import CONFIG_FILE, USER_CONFIG_DIR, MCP_LOGS_DIR, LLAMA_SERVER_LOG_FILE
-    from sigma_pikachu.config_manager import config_manager # Singleton instance
-    from sigma_pikachu.process_manager import process_manager # Singleton instance
-    from sigma_pikachu.ui_manager import ui_manager # Singleton instance
-    from PIL import Image, ImageDraw # Check for Pillow
-except ImportError as e:
-    print(f"Error importing application modules: {e}")
-    print("Please ensure all modules (constants, config_manager, process_manager, ui_manager) are in the 'sigma_pikachu' directory.")
-    print("If running from source, ensure the project root is in PYTHONPATH or you are running from the project root e.g. python -m sigma_pikachu.main")
-    sys.exit(1)
+#try:
+from sigma_pikachu.constants import CONFIG_FILE, USER_CONFIG_DIR, MCP_LOGS_DIR, LLAMA_SERVER_LOG_FILE
+from sigma_pikachu.settings.config_manager import config_manager # Singleton instance
+from sigma_pikachu.services.process_manager import process_manager # Singleton instance
+from sigma_pikachu.ui_manager import ui_manager # Singleton instance
+from PIL import Image, ImageDraw # Check for Pillow
+# except ImportError as e:
+#     print(f"Error importing application modules: {e}")
+#     print("Please ensure all modules (constants, config_manager, process_manager, ui_manager) are in the 'sigma_pikachu' directory.")
+#     print("If running from source, ensure the project root is in PYTHONPATH or you are running from the project root e.g. python -m sigma_pikachu.main")
+#     sys.exit(1)
 
 
 def initial_setup_checks():
@@ -74,7 +74,14 @@ def main():
     # For now, let's keep it manual via tray icon.
     # Example: if config_manager.get_config().get("autostart_llama_server", False):
     # process_manager.start_llama_server()
-    
+
+    # Start the proxy server
+    # Use placeholder ports for now, matching those in ProcessManager
+    PROXY_LISTEN_PORT = 8888
+    PROXY_DOWNSTREAM_PORT = 9999 # This should be the port of the default model server
+    process_manager.start_proxy_server('127.0.0.1', PROXY_LISTEN_PORT, '127.0.0.1', PROXY_DOWNSTREAM_PORT)
+
+
     # The ui_manager will set up and run the tray icon, which is blocking.
     try:
         ui_manager.setup_and_run_tray_icon()

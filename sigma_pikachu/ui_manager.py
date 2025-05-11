@@ -4,8 +4,8 @@ import threading
 import time
 
 from .constants import ICON_FILE, CONFIG_FILE
-from .config_manager import config_manager # Singleton
-from .process_manager import process_manager # Singleton
+from .settings.config_manager import config_manager # Singleton
+from .services.process_manager import process_manager # Singleton
 from .utils import view_llama_server_logs, view_mcp_server_log, view_mcp_logs_directory
 
 class UIManager:

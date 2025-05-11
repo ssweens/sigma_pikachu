@@ -31,6 +31,7 @@ if not os.path.exists(USER_CONFIG_DIR):
     os.makedirs(USER_CONFIG_DIR, exist_ok=True)
 
 CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "config.yaml")
+LLAMA_SERVER_CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "llama.cpp-python_config.json")
 LLAMA_SERVER_LOG_FILE = os.path.join(EXTERNAL_DIR, "server.log")
 MCP_LOGS_DIR = os.path.join(EXTERNAL_DIR, "mcp_logs")
 
