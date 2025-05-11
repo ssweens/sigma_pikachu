@@ -79,8 +79,11 @@ class UIManager:
     def _get_mcp_server_log_text(self, mcp_alias):
         return f"View {mcp_alias} Log"
 
+    # This is now the primary method for generating the MCP servers menu.
+    # It uses a flatter structure based on user's successful modification.
     def _get_mcp_servers_menu(self, item):
         mcp_server_configs = config_manager.get_mcp_servers()
+
         if not mcp_server_configs:
             return pystray.Menu(pystray.MenuItem("No MCP servers in config", None, enabled=False))
 
@@ -90,39 +93,39 @@ class UIManager:
             enabled_in_config = mcp_config.get("enabled", False)
             if not alias:
                 continue
-
-            # Submenu for each MCP server
-            server_specific_menu = pystray.Menu(
-                pystray.MenuItem(
-                    self._get_mcp_server_toggle_text(alias),
-                    # Corrected lambda: pystray provides (icon, item) to the lambda.
-                    # We capture 'alias' and call our method with it.
-                    lambda icon, menu_item_obj, captured_alias=alias: self._toggle_mcp_server_action(captured_alias)
-                ),
-                pystray.MenuItem(
-                    self._get_mcp_server_log_text(alias),
-                    lambda icon, menu_item_obj, captured_alias=alias: view_mcp_server_log(captured_alias)
-                )
-            )
             
-            # Main item for this MCP server in the "MCP Servers" menu
+            # Item to toggle the server: Text shows status, action toggles.
             mcp_sub_items.append(pystray.MenuItem(
-                self._get_mcp_server_status_text(alias), # This shows Name: Status
-                server_specific_menu,
-                enabled=enabled_in_config # Gray out if disabled in config
+                self._get_mcp_server_status_text(alias), # Dynamic text: "Alias: Status"
+                # ACTION must be a callable (lambda) with (icon, item) signature. 'alias' is captured by closure.
+                lambda icon, item: self._toggle_mcp_server_action(alias),
+                enabled=enabled_in_config
             ))
-        
-        if not mcp_sub_items: # If all were disabled or misconfigured
-             return pystray.Menu(pystray.MenuItem("No enabled MCP servers", None, enabled=False))
+            # Item to view log for this server
+            mcp_sub_items.append(pystray.MenuItem(
+                f"View Log for {alias}",
+                # ACTION must be a callable (lambda) with (icon, item) signature. 'alias' is captured by closure.
+                lambda icon, item: view_mcp_server_log(alias),
+                enabled=enabled_in_config
+            ))
+            mcp_sub_items.append(pystray.Menu.SEPARATOR) # Separator after each server's items
 
+        if not mcp_sub_items: # Should only happen if all configs had no alias
+            return pystray.Menu(pystray.MenuItem("No valid MCP servers configured", None, enabled=False))
+
+        # Remove last separator if it exists
+        if mcp_sub_items and mcp_sub_items[-1] == pystray.Menu.SEPARATOR:
+            mcp_sub_items.pop()
+
+        # Add global actions
         mcp_sub_items.extend([
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Start All Enabled MCPs", self._start_all_mcp_action), # Takes (icon, item)
-            pystray.MenuItem("Stop All Running MCPs", self._stop_all_mcp_action),   # Takes (icon, item)
-            pystray.MenuItem("View All MCP Logs (Directory)", lambda icon, menu_item_obj: view_mcp_logs_directory()) # Corrected lambda
+            pystray.Menu.SEPARATOR, # Separator before global actions
+            pystray.MenuItem("Start All Enabled MCPs", self._start_all_mcp_action),
+            pystray.MenuItem("Stop All Running MCPs", self._stop_all_mcp_action),
+            pystray.MenuItem("View All MCP Logs (Directory)", lambda icon, menu_item_obj: view_mcp_logs_directory())
         ])
+        
         return pystray.Menu(*mcp_sub_items)
-
 
     # --- Action Callbacks (must take icon, item) ---
     # Note: methods called directly by pystray (like _toggle_llama_server_action) take (self, icon, item)
@@ -272,11 +275,12 @@ class UIManager:
             pystray.MenuItem(self._get_llama_toggle_text, self._toggle_llama_server_action),
             pystray.MenuItem(
                 "Llama Models Loaded",
-                self._get_llama_models_menu,
+                self._get_llama_models_menu(None), # Static submenu for models
                 visible=self._is_llama_models_menu_visible
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("MCP Servers", self._get_mcp_servers_menu),
+            # Using the corrected _get_mcp_servers_menu, called once for a static structure
+            pystray.MenuItem("MCP Servers", self._get_mcp_servers_menu(None)), 
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Open config.yaml", self._open_config_action),
             pystray.MenuItem("View Llama Server Log", self._view_llama_logs_action),

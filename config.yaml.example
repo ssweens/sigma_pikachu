@@ -1,53 +1,54 @@
 ---
-host: 0.0.0.0
-port: 9999
-models:
-- model: "/Users/ssweens/models/Qwen3-8B-Q8_0.gguf"
-  model_alias: Qwen3-8B
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: qwen
-- model: "/Users/ssweens/models/Qwen3-30B-A3B-Q4_K_M.gguf"
-  model_alias: Qwen3-30B
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: qwen
-- model: "/Users/ssweens/models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf"
-  model_alias: Josie
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: qwen
-- model: "/Users/ssweens/models/qwen2.5-coder-7b-instruct-q8_0.gguf"
-  model_alias: Qwen2.5-Coder-7B-Instruct
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: llama-2
-# - model: "/Volumes/RabbleFiles/Models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q4_K_M.gguf"
-#   model_alias: Josie4K_M
-#   n_gpu_layers: 99
-#   offload_kqv: true
-#   n_threads: 32
-#   n_ctx: 4096
-# - model: "/Volumes/RabbleFiles/Models/gemma3-12b-claude-3.7-sonnet-reasoning-distilled.Q8_0.gguf"
-#   model_alias: ClaudeSeek
-#   n_gpu_layers: 36
-#   offload_kqv: true
-#   n_threads: 24
-#   n_ctx: 0
-# - model: "/Volumes/RabbleFiles/Models/Qwen3-4B-Q8_0.gguf"
-#   model_alias: Qwen3-4B
-#   n_gpu_layers: 99
-#   offload_kqv: true
-#   n_threads: 24
-#   n_ctx: 0
+llama:
+  host: 0.0.0.0
+  port: 9999
+  models:
+  - model: "/Users/ssweens/models/Qwen3-8B-Q8_0.gguf"
+    model_alias: Qwen3-8B
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: qwen
+  - model: "/Users/ssweens/models/Qwen3-30B-A3B-Q4_K_M.gguf"
+    model_alias: Qwen3-30B
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: qwen
+  - model: "/Users/ssweens/models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf"
+    model_alias: Josie
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: qwen
+  - model: "/Users/ssweens/models/qwen2.5-coder-7b-instruct-q8_0.gguf"
+    model_alias: Qwen2.5-Coder-7B-Instruct
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: llama-2
+  # - model: "/Volumes/RabbleFiles/Models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q4_K_M.gguf"
+  #   model_alias: Josie4K_M
+  #   n_gpu_layers: 99
+  #   offload_kqv: true
+  #   n_threads: 32
+  #   n_ctx: 4096
+  # - model: "/Volumes/RabbleFiles/Models/gemma3-12b-claude-3.7-sonnet-reasoning-distilled.Q8_0.gguf"
+  #   model_alias: ClaudeSeek
+  #   n_gpu_layers: 36
+  #   offload_kqv: true
+  #   n_threads: 24
+  #   n_ctx: 0
+  # - model: "/Volumes/RabbleFiles/Models/Qwen3-4B-Q8_0.gguf"
+  #   model_alias: Qwen3-4B
+  #   n_gpu_layers: 99
+  #   offload_kqv: true
+  #   n_threads: 24
+  #   n_ctx: 0
 
 # Configuration for Model Context Protocol (MCP) Servers
 # Each item in the list represents an MCP server that can be managed by the application.

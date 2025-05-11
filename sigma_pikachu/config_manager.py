@@ -6,6 +6,15 @@ import subprocess
 from .constants import CONFIG_FILE, DEFAULT_HOST, DEFAULT_LLAMA_PORT
 
 class ConfigManager:
+    DEFAULT_CONFIG = {
+        "llama": {
+            "host": DEFAULT_HOST,
+            "port": DEFAULT_LLAMA_PORT,
+            "models": []
+        },
+        "mcp_servers": []
+    }
+
     def __init__(self):
         self.config_file_path = CONFIG_FILE
         self.config = self._load_config()
@@ -15,20 +24,14 @@ class ConfigManager:
         if not os.path.exists(self.config_file_path):
             print(f"Error: Configuration file {self.config_file_path} not found.")
             # Create a minimal default config if it doesn't exist
-            default_cfg = {
-                "host": DEFAULT_HOST,
-                "port": DEFAULT_LLAMA_PORT,
-                "models": [],
-                "mcp_servers": []
-            }
             try:
                 with open(self.config_file_path, 'w') as f:
-                    yaml.dump(default_cfg, f, sort_keys=False)
+                    yaml.dump(self.DEFAULT_CONFIG, f, sort_keys=False)
                 print(f"Created a default configuration file at {self.config_file_path}")
-                return default_cfg
+                return self.DEFAULT_CONFIG.copy()
             except Exception as e:
                 print(f"Error creating default configuration file: {e}")
-                return None
+                return None # Or consider returning self.DEFAULT_CONFIG.copy()
 
 
         try:
@@ -36,12 +39,7 @@ class ConfigManager:
                 config_data = yaml.safe_load(f)
             if config_data is None: # Handle empty or invalid YAML
                 print(f"Warning: {self.config_file_path} is empty or invalid. Using defaults.")
-                return {
-                    "host": DEFAULT_HOST,
-                    "port": DEFAULT_LLAMA_PORT,
-                    "models": [],
-                    "mcp_servers": []
-                }
+                return self.DEFAULT_CONFIG.copy()
             # Convert to JSON and back to ensure consistent object types (e.g., dicts not OrderedDicts)
             # although with safe_load, this is less of an issue.
             return json.loads(json.dumps(config_data))
@@ -64,36 +62,27 @@ class ConfigManager:
         if self.config is None:
             print("Failed to reload configuration. Previous configuration might still be in use if not overwritten.")
             # Potentially fall back to a known good state or a minimal default
-            self.config = {
-                "host": DEFAULT_HOST,
-                "port": DEFAULT_LLAMA_PORT,
-                "models": [],
-                "mcp_servers": []
-            }
+            self.config = self.DEFAULT_CONFIG.copy()
         return self.config is not None
 
 
     def get_config(self):
         """Returns the current configuration."""
         if self.config is None: # Ensure there's always some config to return
-             return {
-                "host": DEFAULT_HOST,
-                "port": DEFAULT_LLAMA_PORT,
-                "models": [],
-                "mcp_servers": []
-            }
+             return self.DEFAULT_CONFIG.copy()
         return self.config
 
     def get_llama_host_port(self):
         """Gets host and port for the Llama server."""
-        cfg = self.get_config()
-        host = cfg.get("host", DEFAULT_HOST)
-        port = cfg.get("port", DEFAULT_LLAMA_PORT)
+        llama_config = self.get_config().get("llama", {})
+        host = llama_config.get("host", DEFAULT_HOST)
+        port = llama_config.get("port", DEFAULT_LLAMA_PORT)
         return host, port
 
     def get_llama_models(self):
         """Gets the list of Llama models."""
-        return self.get_config().get("models", [])
+        llama_config = self.get_config().get("llama", {})
+        return llama_config.get("models", [])
 
     def get_mcp_servers(self):
         """Gets the list of MCP server configurations."""
@@ -122,9 +111,11 @@ if __name__ == '__main__':
         print(f"Config file {CONFIG_FILE} does not exist. Please create it.")
         # Create a dummy config for testing if it doesn't exist
         dummy_config = {
-            'host': '127.0.0.1',
-            'port': 8080,
-            'models': [{'model_alias': 'TestModel', 'model': '/path/to/model.gguf'}],
+            "llama": {
+                'host': '127.0.0.1',
+                'port': 8080,
+                'models': [{'model_alias': 'TestModel', 'model': '/path/to/model.gguf'}]
+            },
             'mcp_servers': [{'alias': 'TestMCP', 'command': 'echo "MCP Test"', 'enabled': True}]
         }
         with open(CONFIG_FILE, 'w') as f:
