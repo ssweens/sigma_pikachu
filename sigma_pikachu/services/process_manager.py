@@ -13,10 +13,13 @@ from . import socket_proxy # Import the socket_proxy script from the same direct
 from .llama_server_manager import LlamaServerManager
 from .mcp_server_manager import McpServerManager
 from .proxy_server_manager import ProxyServerManager
+from .llama_swap_manager import LlamaSwapManager # Import the new manager class
+# Removed import of ui_manager to break circular dependency
 
 class ProcessManager:
     def __init__(self):
         self.llama_server_process = None
+        self.llama_swap_process = None # Add process reference for llama-swap
         self.mcp_server_processes = {} # Stores {'alias': Popen_object}
         self.proxy_server = None # To hold the asyncio server instance
         self._proxy_loop = None # To hold the asyncio event loop for the proxy
@@ -26,9 +29,26 @@ class ProcessManager:
 
         # Instantiate the new manager classes
         self.llama_manager = LlamaServerManager(self)
+        self.llama_swap_manager = LlamaSwapManager(self) # Instantiate LlamaSwapManager
         self.mcp_manager = McpServerManager(self)
         # ProxyServerManager instance is created only if enabled in config
         self.proxy_manager = None
+
+        # Process monitoring thread
+        self._monitor_thread = threading.Thread(target=self._monitor_processes, daemon=True)
+        self._monitor_thread.start()
+
+        # Keep track of previous states to detect changes
+        self._prev_llama_server_running = False
+        self._prev_llama_swap_running = False
+        self._prev_mcp_server_running_states = {} # {'alias': bool}
+
+        # Callback for UI updates, set after initialization
+        self._ui_update_callback = None
+
+    def set_ui_update_callback(self, callback):
+        """Sets the callback function to be called when a UI update is needed."""
+        self._ui_update_callback = callback
 
     # --- Llama Server Management ---
     def is_llama_server_running(self):
@@ -39,6 +59,16 @@ class ProcessManager:
 
     def stop_llama_server(self):
         return self.llama_manager.stop()
+
+    # --- Llama-swap Server Management ---
+    def is_llama_swap_running(self):
+        return self.llama_swap_manager.is_running()
+
+    def start_llama_swap(self):
+        return self.llama_swap_manager.start()
+
+    def stop_llama_swap(self):
+        return self.llama_swap_manager.stop()
 
     # --- MCP Server Management ---
     def is_mcp_server_running(self, alias):
@@ -65,7 +95,7 @@ class ProcessManager:
         return self.proxy_manager.stop()
 
     def start_all_servers(self):
-        """Starts Llama server, all enabled MCP servers, and the proxy server."""
+        """Starts the configured server (Llama or Llama-swap), all enabled MCP servers, and the proxy server."""
         print("Starting all servers...")
 
         current_config = config_manager.get_config()
@@ -73,8 +103,18 @@ class ProcessManager:
             print("Error: Could not load config. Cannot start servers.")
             return
 
-        # Start Llama server
-        self.llama_manager.start()
+        server_type = current_config.get("server_type", "llama_swap").lower() # Get server type from config
+
+        # Start the configured server (Llama or Llama-swap)
+        if server_type == "llama_cpp":
+            print("Configured server type: llama_cpp. Starting Llama server...")
+            self.llama_manager.start()
+        elif server_type == "llama_swap":
+            print("Configured server type: llama_swap. Starting Llama-swap server...")
+            self.llama_swap_manager.start()
+        else:
+            print(f"Warning: Unknown server_type '{server_type}' in config.yaml. Not starting a model server.")
+
 
         # Start enabled MCP servers
         mcp_configs = config_manager.get_mcp_servers()
@@ -89,14 +129,45 @@ class ProcessManager:
         if proxy_enabled:
             PROXY_LISTEN_HOST = proxy_config.get("listen_host", '127.0.0.1')
             PROXY_LISTEN_PORT = proxy_config.get("listen_port", 8888)
-            PROXY_DOWNSTREAM_HOST = proxy_config.get("downstream_host", '127.0.0.1')
-            PROXY_DOWNSTREAM_PORT = proxy_config.get("downstream_port", 5000) # Default to default model server port
+            # The downstream host/port should point to the *configured* model server
+            if server_type == "llama_cpp":
+                 # Assuming default llama_cpp.server port is 5000 unless overridden in its config
+                 # This might need refinement if llama_cpp.server port is configurable elsewhere
+                 PROXY_DOWNSTREAM_HOST = proxy_config.get("downstream_host", '127.0.0.1')
+                 PROXY_DOWNSTREAM_PORT = proxy_config.get("downstream_port", 5000)
+            elif server_type == "llama_swap":
+                 # Get listen address from llama_swap config, split host and port
+                 llama_swap_listen = current_config.get("llama_swap", {}).get("listen", ":9999")
+                 # Simple split, assumes format :port or host:port
+                 if ":" in llama_swap_listen:
+                     parts = llama_swap_listen.split(":")
+                     PROXY_DOWNSTREAM_HOST = parts[0] if parts[0] else '127.0.0.1' # Default to localhost if empty
+                     try:
+                         PROXY_DOWNSTREAM_PORT = int(parts[1])
+                     except (ValueError, IndexError):
+                         print(f"Warning: Invalid llama_swap listen address format '{llama_swap_listen}'. Using default proxy downstream port 5000.")
+                         PROXY_DOWNSTREAM_HOST = proxy_config.get("downstream_host", '127.0.0.1')
+                         PROXY_DOWNSTREAM_PORT = proxy_config.get("downstream_port", 5000)
+                 else:
+                     print(f"Warning: Invalid llama_swap listen address format '{llama_swap_listen}'. Using default proxy downstream port 5000.")
+                     PROXY_DOWNSTREAM_HOST = proxy_config.get("downstream_host", '127.0.0.1')
+                     PROXY_DOWNSTREAM_PORT = proxy_config.get("downstream_port", 5000)
+            else:
+                 # If no valid server type, proxy can't connect downstream
+                 print(f"Warning: Unknown server_type '{server_type}'. Proxy server cannot connect downstream.")
+                 PROXY_DOWNSTREAM_HOST = None
+                 PROXY_DOWNSTREAM_PORT = None
 
-            print("Proxy server is enabled in config. Starting proxy...")
-            # Create the proxy manager instance if it doesn't exist
-            if self.proxy_manager is None:
-                 self.proxy_manager = ProxyServerManager(self)
-            self.proxy_manager.start(PROXY_LISTEN_HOST, PROXY_LISTEN_PORT, PROXY_DOWNSTREAM_HOST, PROXY_DOWNSTREAM_PORT)
+
+            if PROXY_DOWNSTREAM_HOST is not None and PROXY_DOWNSTREAM_PORT is not None:
+                print("Proxy server is enabled in config. Starting proxy...")
+                # Create the proxy manager instance if it doesn't exist
+                if self.proxy_manager is None:
+                     self.proxy_manager = ProxyServerManager(self)
+                self.proxy_manager.start(PROXY_LISTEN_HOST, PROXY_LISTEN_PORT, PROXY_DOWNSTREAM_HOST, PROXY_DOWNSTREAM_PORT)
+            else:
+                 print("Proxy server cannot start due to invalid server configuration.")
+
         else:
             print("Proxy server is disabled in config. Not starting proxy.")
             # Ensure proxy manager is None if it was previously running and now disabled
@@ -109,14 +180,67 @@ class ProcessManager:
 
 
     def stop_all_servers(self):
-        """Stops Llama server, all MCP servers, and the proxy server."""
+        """Stops the configured server (Llama or Llama-swap), all MCP servers, and the proxy server."""
         print("Stopping all servers...")
+        # Stop both managers; they handle if their process is running
         self.llama_manager.stop()
+        self.llama_swap_manager.stop() # Stop llama-swap manager
         self.mcp_manager.stop_all()
         # Stop the proxy server only if it was started
         if self.proxy_manager is not None:
             self.proxy_manager.stop()
         print("All servers stop sequence initiated.")
+
+    def _monitor_processes(self):
+        """Background thread to monitor process states and trigger UI updates."""
+        while True:
+            time.sleep(2) # Check every 2 seconds
+
+            ui_update_needed = False
+
+            # Check Llama Server
+            current_llama_server_running = self.is_llama_server_running()
+            if current_llama_server_running != self._prev_llama_server_running:
+                print(f"ProcessMonitor: Llama server state changed to {current_llama_server_running}. Requesting UI update.")
+                ui_update_needed = True
+                self._prev_llama_server_running = current_llama_server_running
+
+            # Check Llama-swap Server
+            current_llama_swap_running = self.is_llama_swap_running()
+            if current_llama_swap_running != self._prev_llama_swap_running:
+                print(f"ProcessMonitor: Llama-swap server state changed to {current_llama_swap_running}. Requesting UI update.")
+                ui_update_needed = True
+                self._prev_llama_swap_running = current_llama_swap_running
+
+            # Check MCP Servers
+            current_mcp_server_running_states = {}
+            with self._lock: # Lock when accessing mcp_server_processes
+                for alias, process in self.mcp_server_processes.items():
+                    current_mcp_server_running_states[alias] = process is not None and process.poll() is None
+
+            # Detect changes in MCP server states
+            # Check for newly stopped processes
+            for alias, was_running in self._prev_mcp_server_running_states.items():
+                is_running = current_mcp_server_running_states.get(alias, False) # Assume stopped if not in current list
+                if was_running and not is_running:
+                    print(f"ProcessMonitor: MCP server '{alias}' state changed to Stopped. Requesting UI update.")
+                    ui_update_needed = True
+
+            # Check for newly started processes (less likely to be missed by explicit start, but good for robustness)
+            for alias, is_running in current_mcp_server_running_states.items():
+                 was_running = self._prev_mcp_server_running_states.get(alias, False)
+                 if not was_running and is_running:
+                     print(f"ProcessMonitor: MCP server '{alias}' state changed to Running. Requesting UI update.")
+                     ui_update_needed = True
+
+
+            self._prev_mcp_server_running_states = current_mcp_server_running_states # Update previous state
+
+            # Trigger UI update if needed
+            if ui_update_needed and self._ui_update_callback:
+                # Call the registered UI update callback
+                self._ui_update_callback()
+
 
 # Singleton instance
 process_manager = ProcessManager()

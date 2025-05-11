@@ -88,18 +88,67 @@ class ConfigManager:
         """Gets the list of MCP server configurations."""
         return self.get_config().get("mcp_servers", [])
 
-    def open_config_file_externally(self):
-        """Opens the config.yaml file in the default system editor."""
+    def get_llama_swap_models(self):
+        """
+        Gets the list of Llama-swap models from the configured llama-swap config file.
+        Returns an empty list if llama_swap is not configured or config file cannot be read.
+        """
+        main_config = self.get_config()
+        llama_swap_config_path = main_config.get("llama_swap", {}).get("config_file")
+
+        if not llama_swap_config_path:
+            print("Warning: 'llama_swap.config_file' not specified in config.yaml.")
+            return []
+
+        if not os.path.exists(llama_swap_config_path):
+            print(f"Error: Llama-swap configuration file {llama_swap_config_path} not found.")
+            return []
+
         try:
-            if sys.platform == "win32":
-                os.startfile(self.config_file_path)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", self.config_file_path], check=True)
-            else: # linux variants
-                subprocess.run(["xdg-open", self.config_file_path], check=True)
-            print(f"Opened {self.config_file_path}")
+            with open(llama_swap_config_path, 'r') as f:
+                llama_swap_config_data = yaml.safe_load(f)
+
+        except FileNotFoundError:
+            print(f"Error: Llama-swap configuration file {llama_swap_config_path} not found during read.")
+            return []
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML in {llama_swap_config_path}: {e}")
+            return []
         except Exception as e:
-            print(f"Failed to open {self.config_file_path}: {e}")
+            print(f"An unexpected error occurred while loading {llama_swap_config_path}: {e}")
+            return []
+
+        # If data was loaded successfully, process it
+        if llama_swap_config_data is None:
+            print(f"Warning: {llama_swap_config_path} is empty or invalid.")
+            return [] # Return empty list for empty/invalid config
+
+        # The 'models' key in llama-swap config is a dictionary, not a list.
+        # We need to extract the keys (model aliases) from this dictionary.
+        models_dict = llama_swap_config_data.get("models", {})
+        if not isinstance(models_dict, dict):
+             print(f"Warning: 'models' key in {llama_swap_config_path} is not a dictionary.")
+             return [] # Return empty list if 'models' is not a dict
+
+        # Return a list of model aliases (the keys of the models dictionary)
+        # We can represent each model by its alias string for the UI menu.
+        model_aliases = [{"model_alias": alias} for alias in models_dict.keys()]
+
+        return model_aliases
+
+
+def open_config_file_externally(self):
+    """Opens the config.yaml file in the default system editor."""
+    try:
+        if sys.platform == "win32":
+            os.startfile(self.config_file_path)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", self.config_file_path], check=True)
+        else: # linux variants
+            subprocess.run(["xdg-open", self.config_file_path], check=True)
+        print(f"Opened {self.config_file_path}")
+    except Exception as e:
+        print(f"Failed to open {self.config_file_path}: {e}")
 
 # For direct testing or use as a singleton instance
 config_manager = ConfigManager()

@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import time
-from .. import socket_proxy # Import the socket_proxy script from the same directory
+from . import socket_proxy # Import the socket_proxy script from the same directory
 
 class ProxyServerManager:
     def __init__(self, process_manager_instance):

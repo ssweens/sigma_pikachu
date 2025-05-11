@@ -28,6 +28,8 @@ from PIL import Image, ImageDraw # Check for Pillow
 #     print("If running from source, ensure the project root is in PYTHONPATH or you are running from the project root e.g. python -m sigma_pikachu.main")
 #     sys.exit(1)
 
+# Add our local bin directory to PATH for subprocess calls
+os.environ["PATH"] = os.pathsep.join([os.path.join(os.path.dirname(__file__), "bin"), os.environ["PATH"]])
 
 def initial_setup_checks():
     """Perform initial checks, create directories, and ensure Pillow is available."""
@@ -70,17 +72,11 @@ def main():
     # The config_manager and process_manager are already initialized as singletons
     # when their modules are imported.
 
-    # Optionally, attempt to start Llama server or MCP servers on startup based on config?
-    # For now, let's keep it manual via tray icon.
-    # Example: if config_manager.get_config().get("autostart_llama_server", False):
-    # process_manager.start_llama_server()
+    # Set the UI update callback in the process manager
+    process_manager.set_ui_update_callback(ui_manager.request_menu_update)
 
-    # Start the proxy server
-    # Use placeholder ports for now, matching those in ProcessManager
-    PROXY_LISTEN_PORT = 8888
-    PROXY_DOWNSTREAM_PORT = 9999 # This should be the port of the default model server
-    process_manager.start_proxy_server('127.0.0.1', PROXY_LISTEN_PORT, '127.0.0.1', PROXY_DOWNSTREAM_PORT)
-
+    # Start all configured servers (model server, MCP servers, proxy)
+    process_manager.start_all_servers()
 
     # The ui_manager will set up and run the tray icon, which is blocking.
     try:

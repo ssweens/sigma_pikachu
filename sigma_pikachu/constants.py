@@ -33,6 +33,8 @@ if not os.path.exists(USER_CONFIG_DIR):
 CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "config.yaml")
 LLAMA_SERVER_CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "llama.cpp-python_config.json")
 LLAMA_SERVER_LOG_FILE = os.path.join(EXTERNAL_DIR, "server.log")
+
+LLAMA_SWAP_CMD = os.path.join(RESOURCE_DIR, "bin", "llama-swap")
 MCP_LOGS_DIR = os.path.join(EXTERNAL_DIR, "mcp_logs")
 
 # Ensure the MCP logs directory exists

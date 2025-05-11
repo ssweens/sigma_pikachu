@@ -13,6 +13,11 @@ class UIManager:
         self.app_icon = None
         self._ui_update_lock = threading.Lock() # Lock for UI updates if needed from threads
 
+    def request_menu_update(self):
+        """Public method for other modules (like ProcessManager) to request a UI menu update."""
+        print("UI: Received request to update menu.")
+        self._update_menu_async()
+
     def _create_default_icon_image(self):
         """Creates a simple default PIL Image for the tray icon if main icon fails."""
         width = 64
@@ -38,28 +43,71 @@ class UIManager:
 
     # --- Menu Item Text/State Generators ---
     def _get_llama_status_text(self, item):
-        host, port = config_manager.get_llama_host_port()
-        if process_manager.is_llama_server_running():
-            return f"Llama: Running ({host}:{port})"
-        return "Llama: Stopped"
+        current_config = config_manager.get_config()
+        server_type = current_config.get("server_type", "llama_swap").lower()
+
+        if server_type == "llama_cpp":
+            host, port = config_manager.get_llama_host_port() # Assuming this gets llama_cpp config
+            if process_manager.is_llama_server_running():
+                return f"Llama CPP: Running ({host}:{port})"
+            return "Llama CPP: Stopped"
+        elif server_type == "llama_swap":
+            llama_swap_listen = current_config.get("llama_swap", {}).get("listen", ":9999")
+            # Simple split for display, assumes format :port or host:port
+            host, port_str = llama_swap_listen.split(":") if ":" in llama_swap_listen else ('127.0.0.1', llama_swap_listen)
+            port = port_str if port_str else '9999' # Default port if not specified
+
+            if process_manager.is_llama_swap_running():
+                return f"Llama Swap: Running ({host}:{port})"
+            return "Llama Swap: Stopped"
+        else:
+            return f"Model Server: Unknown Type ({server_type})"
+
 
     def _get_llama_toggle_text(self, item):
-        return "Stop Llama Server" if process_manager.is_llama_server_running() else "Start Llama Server"
+        current_config = config_manager.get_config()
+        server_type = current_config.get("server_type", "llama_swap").lower()
+
+        if server_type == "llama_cpp":
+            return "Stop Llama CPP Server" if process_manager.is_llama_server_running() else "Start Llama CPP Server"
+        elif server_type == "llama_swap":
+            return "Stop Llama Swap Server" if process_manager.is_llama_swap_running() else "Start Llama Swap Server"
+        else:
+            return "Toggle Model Server (Unknown Type)"
 
     def _get_llama_models_menu(self, item):
-        models = config_manager.get_llama_models()
+        current_config = config_manager.get_config()
+        server_type = current_config.get("server_type", "llama_swap").lower()
+
+        models = []
+        if server_type == "llama_cpp":
+            models = config_manager.get_llama_models() # Reads from 'llama' section
+        elif server_type == "llama_swap":
+            models = config_manager.get_llama_swap_models() # Reads from llama-swap config file
+
         if not models:
-            return pystray.Menu(pystray.MenuItem("No models in config", None, enabled=False))
-        
+            return pystray.Menu(pystray.MenuItem("No models configured", None, enabled=False))
+
         model_sub_items = []
         for model_info in models:
-            alias = model_info.get("model_alias", "Unknown Model")
+            # Assuming model_info is a dict with 'model_alias' or similar
+            # Adjust key access based on actual llama-swap config structure if needed
+            alias = model_info.get("model_alias", model_info.get("model", "Unknown Model")) # Try 'model_alias' then 'model'
             model_sub_items.append(pystray.MenuItem(alias, None, enabled=False))
         return pystray.Menu(*model_sub_items)
 
     def _is_llama_models_menu_visible(self, item):
-        # Only show "Loaded Models" if server is running and there are models
-        return process_manager.is_llama_server_running() and bool(config_manager.get_llama_models())
+        current_config = config_manager.get_config()
+        server_type = current_config.get("server_type", "llama_swap").lower()
+
+        if server_type == "llama_cpp":
+            # Visible if llama_cpp server is running and models are configured under 'llama:'
+            return process_manager.is_llama_server_running() and bool(config_manager.get_llama_models())
+        elif server_type == "llama_swap":
+            # Visible if llama_swap server is running and models are configured in llama-swap config
+            return process_manager.is_llama_swap_running() and bool(config_manager.get_llama_swap_models())
+        else:
+            return False # Not visible for unknown server types
 
     # --- MCP Menu Item Generators ---
     def _get_mcp_server_status_text(self, mcp_alias):
@@ -139,21 +187,31 @@ class UIManager:
             # For now, direct call, assuming pystray handles it or actions are on main/icon thread.
             # A common pattern is to have the icon run in its own thread, and use icon.loop.call_soon_threadsafe
             # For pystray, updates are often triggered by menu item clicks which are on its thread.
-            # If background process changes state, this needs care.
-            # Let's assume for now that updates are mostly driven by user actions.
             # If background state changes (e.g. server crashes), a more robust update mechanism is needed.
             self.app_icon.update_menu()
 
     def _toggle_llama_server_action(self, icon, item):
-        print("UI: Toggle Llama Server action triggered.")
+        print("UI: Toggle Model Server action triggered.")
+        current_config = config_manager.get_config()
+        server_type = current_config.get("server_type", "llama_swap").lower()
+
         def task():
-            if process_manager.is_llama_server_running():
-                process_manager.stop_llama_server()
+            if server_type == "llama_cpp":
+                if process_manager.is_llama_server_running():
+                    process_manager.stop_llama_server()
+                else:
+                    process_manager.start_llama_server()
+            elif server_type == "llama_swap":
+                if process_manager.is_llama_swap_running():
+                    process_manager.stop_llama_swap()
+                else:
+                    process_manager.start_llama_swap()
             else:
-                process_manager.start_llama_server()
+                print(f"Warning: Cannot toggle unknown server type: {server_type}")
+
             # Schedule update after task completion
             threading.Timer(0.1, self._update_menu_async).start()
-        
+
         threading.Thread(target=task, daemon=True).start()
         # self._update_menu_async() # Moved into the thread
 
@@ -168,13 +226,6 @@ class UIManager:
         # The lambda should be: `lambda icon, item, current_alias=alias: self.ui_manager_instance._toggle_mcp_server_action(current_alias)`
         # This is tricky with instance methods. Let's make the method take (self, icon, item, alias)
         # and adapt the lambda. Or, simpler: the lambda calls a method that *only* takes alias.
-        
-        # Corrected approach: The lambda in get_mcp_servers_menu is:
-        # lambda item_passed_by_pystray, current_alias=alias: self._toggle_mcp_server_action(current_alias)
-        # So this method receives `item_passed_by_pystray` as its first arg after `self`, then `current_alias`.
-        # Let's rename `alias` to `item_or_alias` to reflect this.
-        # No, the lambda is `lambda icon_obj, menu_item_obj, captured_alias=alias: self.actual_handler(captured_alias)`
-        # The actual handler should just take `alias`.
 
         print(f"UI: Toggle MCP Server action triggered for: {alias}")
         mcp_config_to_toggle = None
@@ -182,7 +233,7 @@ class UIManager:
             if conf.get("alias") == alias:
                 mcp_config_to_toggle = conf
                 break
-        
+
         if not mcp_config_to_toggle:
             print(f"Error: No MCP config found for alias {alias}")
             return
@@ -198,8 +249,8 @@ class UIManager:
                 process_manager.stop_mcp_server(alias)
             else:
                 # 'mcp_config_to_toggle' is captured from the outer scope
-                process_manager.start_mcp_server(mcp_config_to_toggle) 
-            
+                process_manager.start_mcp_server(mcp_config_to_toggle)
+
             # Schedule UI update after the blocking task is complete
             threading.Timer(0.1, self._update_menu_async).start()
 
@@ -238,7 +289,7 @@ class UIManager:
         print("UI: View Llama server logs action triggered.")
         # This is also usually fast.
         view_llama_server_logs()
-        
+
     def _quit_action(self, icon, item):
         print("UI: Quit action triggered.")
         # Stopping servers can take time, so definitely thread this.
@@ -250,14 +301,14 @@ class UIManager:
                 print("Quit task: Requesting icon to stop.")
                 self.app_icon.stop() # Request pystray to stop its loop
             # The main script (main.py) will handle sys.exit after icon.run() returns.
-        
+
         # Don't make this a daemon thread if it's critical it finishes before app truly exits.
         # However, icon.stop() should make the main loop terminate, then main.py can exit.
         # If stop_all_servers is lengthy, UI might be gone before it finishes.
         # For quit, it might be okay for it to block for a few seconds.
         # Let's try direct first for quit, if it hangs too long, then thread.
         # On second thought, quit should also be responsive.
-        
+
         # Threaded quit:
         quit_thread = threading.Thread(target=task, daemon=False) # Non-daemon for quit
         quit_thread.start()
@@ -280,7 +331,7 @@ class UIManager:
             ),
             pystray.Menu.SEPARATOR,
             # Using the corrected _get_mcp_servers_menu, called once for a static structure
-            pystray.MenuItem("MCP Servers", self._get_mcp_servers_menu(None)), 
+            pystray.MenuItem("MCP Servers", self._get_mcp_servers_menu(None)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Open config.yaml", self._open_config_action),
             pystray.MenuItem("View Llama Server Log", self._view_llama_logs_action),
@@ -290,7 +341,7 @@ class UIManager:
         )
 
         self.app_icon = pystray.Icon("sigma_pikachu_tray", icon_image, "Sigma Pikachu Control", menu)
-        
+
         # Initial state update might be good if servers can auto-start
         # For now, assuming servers start based on user action or later logic in main
         # self._update_menu_async() # Call once to set initial text based on current state.
@@ -307,7 +358,7 @@ if __name__ == '__main__':
     # It also assumes that constants, config_manager, process_manager are available.
     print("UIManager Test: Setting up a dummy tray icon.")
     print(f"Ensure {CONFIG_FILE} exists and is configured if you want to test MCP server menus.")
-    
+
     # For testing, we might need to mock process_manager and config_manager
     # or ensure they can run in a limited test mode.
     # For now, assume they initialize.

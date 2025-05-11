@@ -1,0 +1,29 @@
+models:
+  "Josie":
+    proxy: "http://127.0.0.1:10000"
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf
+      --threads 32
+      --port 10000
+  "Qwen3-30B":
+    proxy: "http://127.0.0.1:10000"
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/Qwen3-30B-A3B-Q4_K_M.gguf --threads 32 --ctx-size 16384 --n-gpu-layers 99 --port 10000
+  "Qwen2.5-Coder-7B-Instruct":
+    proxy: "http://127.0.0.1:10000"
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf --threads 32 --ctx-size 32768 --n-gpu-layers 99 --port 10000
+
+
+
+
+
+
+  # "smollm2":
+  #   proxy: "http://127.0.0.1:9999"
+  #   cmd: >
+  #     /app/llama-server
+  #     -hf bartowski/SmolLM2-135M-Instruct-GGUF:Q4_K_M
+  #     --port 10000
+  #  # -hf bartowski/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M
