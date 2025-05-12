@@ -7,228 +7,162 @@ import multiprocessing
 import argparse
 from pathlib import Path
 import numpy as np # For handling numpy types returned by gguf
+import re # For structured filename parsing
+
 # Assuming GGMLArchitectureType exists or we handle it gracefully
-from gguf import GGUFReader, GGMLQuantizationType, GGUFValueType 
 try:
     from gguf import GGMLArchitectureType
 except ImportError:
     GGMLArchitectureType = None # Placeholder if not available
 
+# Import load_gguf and GGML_NAMES from our local gguflib
+try:
+    from .gguflib import load_gguf, GGML_NAMES
+except ImportError:
+    print("❌ Error: Could not import load_gguf or GGML_NAMES from tools.gguflib.py")
+    sys.exit(1)
+
+# Official GGUF filename regex (Python's ?P<name> syntax for named groups)
+GGUF_FILENAME_REGEX = (
+    r"^(?P<BaseName>[A-Za-z0-9\s]*(?:(?:-(?:(?:[A-Za-z\s][A-Za-z0-9\s]*)|(?:[0-9\s]*)))*))"
+    r"(?:(?:-(?P<SizeLabel>(?:\d+x)?(?:\d+\.)?\d+[A-Za-z](?:-[A-Za-z]+(?:\.\d+)?[A-Za-z]+)?)(?:-(?P<FineTune>[\w.\s_-]+))?))?"
+    r"(?:(?:-(?P<Version>v\d+(?:\.\d+)*)))?"
+    r"(?:(?:[-\\.](?P<Encoding>(?!LoRA|vocab)[\w_]+)))?"
+    r"(?:(?:[-\\.](?P<Type>LoRA|vocab)))?"
+    r"(?:(?:[-\\.](?P<Shard>\d{5}-of-\d{5})))?"
+    r"\.gguf$"
+)
+
+# Global list of known quantization types for validation and guessing
+KNOWN_QUANT_TYPES = [
+    "Q4_K_M", "IQ4_NL", "IQ4_XS", "IQ3_S", "IQ3_M", "IQ3_XXS", "IQ2_S", "IQ2_M", "IQ2_XS", "IQ2_XXS", "IQ1_S", "IQ1_M", # Common IQ quants
+    "Q5_K_M", "Q6_K", "Q4_K_S", "Q3_K_M", "Q3_K_L", "Q3_K_S",
+    "Q8_0", "Q5_K", "Q4_K", "Q3_K", "Q2_K", "Q4_0", "Q5_0",
+    "F16", "BF16", "FP16", "F32", "FP32"
+]
+
 # ---------------------------------------------
-# 🧠 Utility functions
+# 🧠 Utility functions (Simplified)
 # ---------------------------------------------
 
-def resolve_field_value(field_value_obj):
-    """Helper to extract the actual value from a GGUF field's value object."""
-    if field_value_obj is None:
-        return None
+# resolve_field_value and resolve_field are no longer needed with gguflib.load_gguf
+# as it returns native Python types directly in a dictionary.
 
-    val = None
-    # Newer gguf.py library might store parts directly or in a list
-    if hasattr(field_value_obj, 'parts') and field_value_obj.parts:
-        val = field_value_obj.parts[0]
-    # Older or different structure might use .data
-    elif hasattr(field_value_obj, 'data'):
-        if isinstance(field_value_obj.data, list) and len(field_value_obj.data) > 0:
-            val = field_value_obj.data[0]
-        else:
-            val = field_value_obj.data # Could be a direct value
-    # If the object itself is a simple type (less likely for complex fields but possible)
-    elif isinstance(field_value_obj, (str, int, float, bool, bytes)):
-        val = field_value_obj
-    
-    if isinstance(val, bytes):
-        try:
-            return val.decode('utf-8')
-        except UnicodeDecodeError:
-            return val # Return raw bytes if not decodable
-    return val
-
-def resolve_field(fields, key_name):
-    """Resolves a GGUF field by name and returns its processed value."""
-    if not fields:
-        return None
-    
-    field_value_obj = fields.get(key_name) # GGUFReader.fields keys are strings
-    if field_value_obj is None:
-        # Try case-insensitive match for common keys if direct match fails
-        for k_str, v_obj in fields.items(): # k_str is the string key
-            if k_str.lower() == key_name.lower():
-                field_value_obj = v_obj
-                break
-        if field_value_obj is None:
-            return None # Key not found
-            
-    value = resolve_field_value(field_value_obj) # field_value_obj is a GGUFValue instance
-
-    # Handle numpy array of single element first
-    if isinstance(value, np.ndarray) and value.size == 1:
-        try:
-            value = value.item() # Converts to Python scalar
-        except ValueError: # If .item() fails for some reason on a size 1 array
-            pass # Keep original value and let subsequent checks handle it or fail
-
-    # If value is a list of length 1, extract the element, as enums should be single values.
-    if isinstance(value, list) and len(value) == 1:
-        value = value[0]
-
-    # Convert numpy scalar types (like memmap of a single value, int32, uint32) to Python int/float etc.
-    # This should catch cases where value was an np.generic scalar from the start,
-    # or became one after the list/ndarray unwrap if the element itself was np.generic.
-    if isinstance(value, np.generic):
-        try:
-            value = value.item() # Converts to Python scalar
-        except AttributeError: # .item() might not exist for all np types if it's already scalar-like
-            pass
-
-
-    # Handle specific GGUF enums if the value is an integer.
-    # GGUFValue instances have a .type attribute (GGUFValueType enum).
-    # Enums in GGUF are often stored as UINT32.
-    # Debug prints removed.
-    # if key_name in ["general.architecture", "general.quantization_version", "general.file_type"]:
-    #     # Temporarily resolve field_value_obj again just for this print, to avoid altering 'value' if it was already processed
-    #     initial_val_for_debug = resolve_field_value(fields.get(key_name))
-    #     if isinstance(initial_val_for_debug, np.ndarray) and initial_val_for_debug.size == 1:
-    #         initial_val_for_debug = initial_val_for_debug.item()
-    #     elif isinstance(initial_val_for_debug, list) and len(initial_val_for_debug) == 1:
-    #         initial_val_for_debug = initial_val_for_debug[0]
-    #
-    #     print(f"DEBUG: key={key_name}, initial_value_from_gguf_lib_for_key='{initial_val_for_debug}' (type: {type(initial_val_for_debug)}), current_value_for_enum_check='{value}' (type: {type(value)})")
-    #     if hasattr(field_value_obj, 'type'):
-    #         print(f"DEBUG: key={key_name}, field_value_obj.type={field_value_obj.type}")
-    #     if key_name == "general.architecture":
-    #         print(f"DEBUG: GGMLArchitectureType available: {GGMLArchitectureType is not None}")
-
-    if isinstance(value, int) and hasattr(field_value_obj, 'type') and field_value_obj.type == GGUFValueType.UINT32:
-        if key_name == "general.architecture" and GGMLArchitectureType:
-            try:
-                return GGMLArchitectureType(value).name
-            except (ValueError, TypeError):
-                return value # Return raw int if mapping fails
-        elif key_name == "general.quantization_version" or key_name == "general.file_type":
-            try:
-                return GGMLQuantizationType(value).name
-            except (ValueError, TypeError):
-                return value # Return raw int if mapping fails
-    
-    # If 'value' itself is already an instance of GGMLQuantizationType or GGMLArchitectureType
-    # (this can happen if resolve_field_value returns such an object if gguf.py is newer
-    # or if the GGUFValue.parts[0] was already an enum instance)
-    # (this can happen if resolve_field_value returns such an object directly if gguf.py evolves)
-    if GGMLArchitectureType and isinstance(value, GGMLArchitectureType):
-        return value.name
-    if isinstance(value, GGMLQuantizationType):
-        return value.name
-
-    return value
-
+def parse_gguf_filename_structured(filename_str):
+    """
+    Parses a GGUF filename string according to the GGUF_FILENAME_REGEX.
+    Returns a dictionary of named capture groups if the filename matches, else None.
+    """
+    print(f"Parsing filename: {filename_str}")
+    match = re.match(GGUF_FILENAME_REGEX, filename_str, re.IGNORECASE)
+    if match:
+        return match.groupdict()
+    return None
 
 def parse_gguf_metadata(model_path):
-    """Parses GGUF metadata using GGUFReader."""
+    """Parses GGUF metadata using gguflib.load_gguf."""
     try:
-        reader = GGUFReader(model_path, 'r')
-        return reader.fields
+        with open(model_path, "rb") as f:
+            info, _ = load_gguf(f) # We only need the info (metadata) dictionary
+        return info
     except Exception as e:
-        print(f"❌ Error reading GGUF file metadata: {e}")
+        print(f"❌ Error reading GGUF file metadata using gguflib: {e}")
         return None
 
 def print_all_metadata(fields):
-    """Prints all metadata from GGUF fields."""
+    """Prints all metadata from GGUF fields (using gguflib output format)."""
     if not fields:
         print("No metadata to display.")
         return
     print("\n📋 Full GGUF Metadata:\n")
-    # Sort by the key string itself (item[0])
-    for key_name_str, value_obj in sorted(fields.items(), key=lambda item: item[0]):
-        # key_name_str is already the string name of the key
-        # Resolve value, trying different attributes
-        val_resolved = "N/A"
-        if hasattr(value_obj, 'parts') and value_obj.parts:
-            val_resolved = value_obj.parts[0]
-        elif hasattr(value_obj, 'data'):
-            if isinstance(value_obj.data, list) and value_obj.data:
-                val_resolved = value_obj.data[0]
-            else:
-                val_resolved = value_obj.data
-        
-        # Attempt to decode if bytes
-        if isinstance(val_resolved, bytes):
+    # fields is now a simple dictionary from gguflib
+    for key_name_str, value in sorted(fields.items(), key=lambda item: item[0]):
+        # Attempt to decode bytes values for display
+        val_display = value
+        if isinstance(value, bytes):
             try:
-                val_resolved = val_resolved.decode('utf-8', errors='replace')
+                val_display = value.decode('utf-8', errors='replace')
             except: # Keep as bytes if decode fails
                 pass
-        
-        print(f"{key_name_str}: {val_resolved}")
+        # Limit representation length for display
+        print(f"{key_name_str:30} {repr(val_display)[:100]}")
 
 
 def guess_model_size_from_name(name):
     """Guesses model size (e.g., 7B, 13B) from the model name string."""
-    name = name.lower()
+    if not name: return None # Handle empty or None input
+    name_lower = name.lower()
     # Ordered from larger to smaller and more specific to less specific
     # to avoid "7b" matching "17b" or "70b" if those existed.
+    # This list helps canonicalize size strings like "7b" to "7B".
     sizes = {
-        "65b": "65B", "70b": "70B", # Added 70B
-        "34b": "34B", "30b": "30B", "40b": "40B", # Added 40B
-        "22b": "22B", # Added 22B (e.g. Mixtral 8x22B)
+        "65b": "65B", "70b": "70B",
+        "34b": "34B", "30b": "30B", "40b": "40B",
+        "22b": "22B", # e.g. Mixtral 8x22B, this will pick 22B
         "14b": "14B", "13b": "13B",
         "8b": "8B", "7b": "7B",
-        "3b": "3B", "1.5b": "1.5B", "0.5b": "0.5B" # Smaller models
+        "3b": "3B", "1.5b": "1.5B", "0.5b": "0.5B"
     }
+    # Check for direct matches like "7B" from SizeLabel first
+    if name in sizes.values(): # e.g. if name is "7B" directly
+        return name
+    if name_lower in sizes: # e.g. if name is "7b"
+        return sizes[name_lower]
+
+    # Then check for substrings if direct/lowercase match failed
     for key, val in sizes.items():
-        if key in name:
+        if key in name_lower:
             return val
     return None
 
+# map_quantization_from_meta needs to be updated to work with the simple dictionary
 def map_quantization_from_meta(fields):
-    """Maps GGUF quantization type from metadata to a known string."""
+    """Maps GGUF quantization type from metadata to a known string using gguflib's GGML_NAMES."""
     if not fields: return None
-    
-    # Try general.quantization_version first (newer GGUF versions)
-    quant_version_enum = resolve_field(fields, "general.quantization_version")
-    if quant_version_enum is not None:
-        try:
-            # GGMLQuantizationType is an enum, get its name
-            if isinstance(quant_version_enum, GGMLQuantizationType):
-                 return quant_version_enum.name
-            # If it's already a string from resolve_field (due to direct value)
-            if isinstance(quant_version_enum, str):
-                return quant_version_enum.upper()
-            # If it's an int, try to map it
-            if isinstance(quant_version_enum, int):
-                return GGMLQuantizationType(quant_version_enum).name
-        except ValueError:
-            pass # Enum value not recognized
 
-    # Fallback to tensor_data_layout or other fields if general.quantization_version is not present/useful
-    # This part is tricky as "tensor_data_layout" might not directly map to a quant string like "Q4_K_M"
-    # It often indicates the highest quantization present, e.g., "Q8_0" or "Q4_K"
-    # For simplicity, we'll rely on general.quantization_version for now.
-    # If more advanced fallback is needed, it would require deeper inspection of tensor types.
-    
-    # Try to get it from general.file_type (older way, often an int)
-    file_type_val = resolve_field(fields, "general.file_type")
-    if file_type_val is not None and isinstance(file_type_val, int):
-        try:
-            return GGMLQuantizationType(file_type_val).name
-        except ValueError:
-            pass
-            
+    # Try general.quantization_version first (newer GGUF versions)
+    # gguflib returns the raw integer value for UINT32 enums
+    quant_version_int = fields.get("general.quantization_version")
+    if isinstance(quant_version_int, int):
+        # Use GGML_NAMES from gguflib to map the integer to a string name
+        quant_name = GGML_NAMES.get(quant_version_int)
+        if quant_name:
+            return quant_name.upper() # Return uppercase name like Q4_K_M
+        else:
+            # If integer value is not in GGML_NAMES, return the integer itself or None
+            # print(f"DEBUG: Unknown quantization version integer: {quant_version_int}")
+            pass # Fall through to check general.file_type
+
+    # Fallback to general.file_type (older way, often an int)
+    file_type_int = fields.get("general.file_type")
+    if isinstance(file_type_int, int):
+         # Use GGML_NAMES from gguflib to map the integer to a string name
+        quant_name = GGML_NAMES.get(file_type_int)
+        if quant_name:
+            return quant_name.upper()
+        else:
+            # print(f"DEBUG: Unknown file type integer: {file_type_int}")
+            pass # Fall through
+
+    # If metadata fields are strings directly (less common but possible)
+    q_ver_str = fields.get("general.quantization_version")
+    if isinstance(q_ver_str, str):
+         return q_ver_str.upper()
+
+    q_ft_str = fields.get("general.file_type")
+    if isinstance(q_ft_str, str):
+         return q_ft_str.upper()
+
     return None
 
 
 def guess_quant_type_from_name(name):
     """Guesses quantization type from the model filename as a fallback."""
-    name = name.upper()
-    # Ordered by typical preference, commonality, and length for better matching
-    known_quants = [
-        "Q4_K_M", "IQ4_NL", "IQ4_XS", "IQ3_S", "IQ3_M", "IQ3_XXS", "IQ2_S", "IQ2_M", "IQ2_XS", "IQ2_XXS", "IQ1_S", "IQ1_M", # Common IQ quants
-        "Q5_K_M", "Q6_K", "Q4_K_S", "Q3_K_M", "Q3_K_L", "Q3_K_S",
-        "Q8_0", "Q5_K", "Q4_K", "Q3_K", "Q2_K", "Q4_0", "Q5_0",
-        "F16", "BF16", "FP16", "F32", "FP32"
-    ]
-    for qt in known_quants:
-        if qt in name:
+    if not name: return None
+    name_upper = name.upper()
+    # Uses the global KNOWN_QUANT_TYPES list
+    for qt in KNOWN_QUANT_TYPES:
+        if qt in name_upper: # Check if the known quant string is a substring
             return qt
     return None
 
@@ -402,8 +336,9 @@ def recommend_llama_cpp_params(model_size, quant_type, sys_info, fields, arch_st
     # Use the passed arch_str
     if arch_str and arch_str != "Unknown" and not arch_str.startswith("Unknown ("):
         ctx_len_key = f"{arch_str}.context_length" # e.g. llama.context_length
-        meta_ctx = resolve_field(fields, ctx_len_key)
-        if meta_ctx and isinstance(meta_ctx, int) and meta_ctx > 0:
+        # Use direct dictionary access with .get() instead of resolve_field
+        meta_ctx = fields.get(ctx_len_key)
+        if meta_ctx is not None and isinstance(meta_ctx, int) and meta_ctx > 0:
             n_ctx = min(n_ctx, meta_ctx) # Use model's stated max if smaller than our guess
 
     # Rope scaling / frequency base
@@ -412,16 +347,18 @@ def recommend_llama_cpp_params(model_size, quant_type, sys_info, fields, arch_st
 
     if arch_str and arch_str != "Unknown" and not arch_str.startswith("Unknown ("):
         # Try to get rope parameters from metadata first
-        meta_rope_base = resolve_field(fields, f"{arch_str}.rope.freq_base")
-        meta_rope_scale = resolve_field(fields, f"{arch_str}.rope.scaling.factor") # Common key for scale
-        # meta_rope_type = resolve_field(fields, f"{arch_str}.rope.scaling.type")
+        # Use direct dictionary access with .get() instead of resolve_field
+        meta_rope_base = fields.get(f"{arch_str}.rope.freq_base")
+        meta_rope_scale = fields.get(f"{arch_str}.rope.scaling.factor") # Common key for scale
+        # meta_rope_type = fields.get(f"{arch_str}.rope.scaling.type") # Use direct access here too if needed
 
 
-        if meta_rope_base and isinstance(meta_rope_base, (int, float)) and meta_rope_base > 0:
+        if meta_rope_base is not None and isinstance(meta_rope_base, (int, float)) and meta_rope_base > 0:
             rope_freq_base = int(meta_rope_base)
         # Fallback heuristics if metadata not present or not useful
         elif arch_str == "llama":
-            model_name_str = resolve_field(fields, "general.name") or ""
+            # Use direct dictionary access with .get() instead of resolve_field
+            model_name_str = fields.get("general.name") or ""
             if "llama3" in model_name_str.lower() or "llama-3" in model_name_str.lower():
                 rope_freq_base = 500000
             else: # Llama 1/2 default
@@ -429,7 +366,7 @@ def recommend_llama_cpp_params(model_size, quant_type, sys_info, fields, arch_st
         elif arch_str == "qwen2": # Qwen2 models often use 1M
              rope_freq_base = 1000000
         
-        if meta_rope_scale and isinstance(meta_rope_scale, (int, float)) and meta_rope_scale > 0:
+        if meta_rope_scale is not None and isinstance(meta_rope_scale, (int, float)) and meta_rope_scale > 0:
             rope_freq_scale = float(meta_rope_scale)
 
     params_to_return = {
@@ -462,125 +399,152 @@ def main():
 
     fields = parse_gguf_metadata(str(model_filepath))
     if fields is None:
-        sys.exit(1) # Error already printed in parse_gguf_metadata
+        sys.exit(1)
+
+    # Parse filename using the structured regex
+    parsed_filename_parts = parse_gguf_filename_structured(model_filepath.name)
 
     if args.show_meta:
         print_all_metadata(fields)
-        sys.exit(0)
+        #if parsed_filename_parts:
+        print("\n📄 Parsed Filename Components (from regex):")
+        for key, value in sorted(parsed_filename_parts.items()):
+            if value is not None: # Only print captured groups
+                print(f"   {key}: {value}")
+       # sys.exit(0)
 
     # --- Gather Model Info ---
-    model_name_meta = resolve_field(fields, "general.name")
-    used_model_name_source = "metadata"
+    # Model Name
+    model_name_meta = fields.get("general.name")
+    model_name_from_filename_regex = parsed_filename_parts.get('BaseName') if parsed_filename_parts else None
+    model_name_to_use = None
+    used_model_name_source = ""
+
     if model_name_meta and isinstance(model_name_meta, str) and len(model_name_meta.strip()) > 0:
-        model_name_to_use = model_name_meta
+        model_name_to_use = model_name_meta.strip()
+        used_model_name_source = "metadata (general.name)"
+    elif model_name_from_filename_regex and len(model_name_from_filename_regex.strip()) > 0:
+        model_name_to_use = model_name_from_filename_regex.strip()
+        used_model_name_source = "filename regex (BaseName)"
     else:
-        model_name_to_use = model_filepath.name
-        used_model_name_source = "filename"
+        model_name_to_use = model_filepath.name # Fallback to full filename
+        used_model_name_source = "full filename (fallback)"
     
     print(f"🧠 Model Name: {model_name_to_use} (from {used_model_name_source})")
 
     # Architecture
-    arch_meta_val = resolve_field(fields, "general.architecture")
+    arch_meta_val = fields.get("general.architecture")
     arch_str = "Unknown"
-    arch_source = "" # Initialize
-
+    arch_source = ""
     if isinstance(arch_meta_val, str):
         arch_str = arch_meta_val
         arch_source = "metadata"
-    elif isinstance(arch_meta_val, int):
-        arch_str = f"Unknown (enum value: {arch_meta_val})"
-        arch_source = "metadata (enum mapping failed or GGMLArchitectureType unavailable)"
-    elif arch_meta_val is not None: # Value found, but not str or int after resolve_field
-        arch_str = f"Unknown (unhandled metadata value: {arch_meta_val})"
-        arch_source = "metadata (unexpected value type)"
-    else: # arch_meta_val is None
-        # arch_str remains "Unknown"
+    elif arch_meta_val is not None:
+        arch_str = f"Unknown (metadata value: {arch_meta_val})"
+        arch_source = "metadata (unexpected value type or integer enum)"
+    else:
         arch_source = "not found in metadata"
     print(f"   Architecture: {arch_str} (from {arch_source})")
 
     # Model Size
-    model_size = guess_model_size_from_name(model_name_to_use)
-    model_size_source = f"guessed from name ('{model_name_to_use}')"
+    model_size = None
+    model_size_source = ""
+    size_label_from_regex = parsed_filename_parts.get('SizeLabel') if parsed_filename_parts else None
+
+    if size_label_from_regex:
+        potential_size = guess_model_size_from_name(size_label_from_regex)
+        if potential_size:
+            model_size = potential_size
+            model_size_source = f"filename regex (SizeLabel: '{size_label_from_regex}') via guess function"
+
+    if not model_size:
+        potential_size_from_model_name = guess_model_size_from_name(model_name_to_use)
+        if potential_size_from_model_name:
+            model_size = potential_size_from_model_name
+            model_size_source = f"guessed from model name ('{model_name_to_use}')"
     
     if not model_size and arch_str != "Unknown" and not arch_str.startswith("Unknown ("):
-        # Try to derive from metadata if name guess fails and arch is known
         param_count_key = f"{arch_str}.parameter_count"
         block_count_key = f"{arch_str}.block_count"
-        
-        param_count = resolve_field(fields, param_count_key)
-        block_count = resolve_field(fields, block_count_key)
+        param_count = fields.get(param_count_key)
+        block_count = fields.get(block_count_key)
 
-        if param_count and isinstance(param_count, (int, float)) and param_count > 1000000:
+        if param_count is not None and isinstance(param_count, (int, float)) and param_count > 1000000:
             param_b = param_count / 1_000_000_000
-            if param_b < 1: model_size = f"{round(param_b*1000)}M"
-            else: model_size = f"{round(param_b)}B" if param_b >=1 else f"{param_b:.1f}B"
-            model_size_source = f"derived from metadata ({param_count:,} params)"
-        elif block_count and isinstance(block_count, int):
-            # Rough heuristic based on block count
-            if block_count >= 80: model_size = "70B"
-            elif block_count >= 60: model_size = "30B"
-            elif block_count >= 40: model_size = "13B"
-            elif block_count >= 30: model_size = "7B"
-            if model_size:
-                model_size_source = f"derived from metadata ({block_count} blocks)"
+            calculated_size_str = f"{round(param_b*1000)}M" if param_b < 1 else (f"{round(param_b)}B" if param_b >=1 else f"{param_b:.1f}B")
+            model_size = calculated_size_str
+            model_size_source = f"derived from metadata ({param_count_key}: {param_count:,} params)"
+        elif block_count is not None and isinstance(block_count, int):
+            derived_size_from_blocks = None
+            if block_count >= 80: derived_size_from_blocks = "70B"
+            elif block_count >= 60: derived_size_from_blocks = "30B"
+            elif block_count >= 40: derived_size_from_blocks = "13B"
+            elif block_count >= 30: derived_size_from_blocks = "7B"
+            if derived_size_from_blocks:
+                model_size = derived_size_from_blocks
+                model_size_source = f"derived from metadata ({block_count_key}: {block_count} blocks)"
     
     if model_size:
         print(f"   Model Size: ~{model_size} ({model_size_source})")
     else:
-        print(f"   ⚠️ Warning: Could not determine model size. Parameter recommendations may be inaccurate. (Name used for guess: '{model_name_to_use}')")
+        print(f"   ⚠️ Warning: Could not determine model size. (Name for guess: '{model_name_to_use}', SizeLabel regex: '{size_label_from_regex}')")
 
     # Quantization
-    quant_from_meta_str = None
-    raw_meta_quant_value = None # To store the actual value from metadata if not a string
+    quant_type_to_use = None
     quant_source_detail = ""
 
-    q_ver = resolve_field(fields, "general.quantization_version")
-    if isinstance(q_ver, str):
-        quant_from_meta_str = q_ver
-        quant_source_detail = "metadata ('general.quantization_version')"
-    # Store the raw value from general.quantization_version if it exists
-    if q_ver is not None:
-        raw_meta_quant_value = q_ver
-
-    if not quant_from_meta_str: # If q_ver didn't yield a string
-        q_ft = resolve_field(fields, "general.file_type")
-        if isinstance(q_ft, str):
-            quant_from_meta_str = q_ft
-            quant_source_detail = "metadata ('general.file_type')"
-        
-        # If q_ver was None (key not found) and q_ft has a value (even if not str),
-        # raw_meta_quant_value should reflect q_ft.
-        # If q_ver had a non-string value, raw_meta_quant_value already holds it.
-        if q_ver is None and q_ft is not None:
-            raw_meta_quant_value = q_ft
-        # If both q_ver and q_ft were None, raw_meta_quant_value remains None.
-
-    quant_type_filename = guess_quant_type_from_name(model_filepath.name)
-    quant_type_to_use = None
+    quant_from_meta = map_quantization_from_meta(fields) # Handles int enums and direct strings from metadata
+    if quant_from_meta:
+        quant_type_to_use = quant_from_meta
+        quant_source_detail = "metadata (via map_quantization_from_meta)"
     
-    if quant_from_meta_str:
-        quant_type_to_use = quant_from_meta_str
+    if not quant_type_to_use:
+        encoding_from_filename_regex = parsed_filename_parts.get('Encoding') if parsed_filename_parts else None
+        if encoding_from_filename_regex and encoding_from_filename_regex.strip():
+            encoding_val_upper = encoding_from_filename_regex.upper().strip()
+            if encoding_val_upper in KNOWN_QUANT_TYPES:
+                quant_type_to_use = encoding_val_upper
+                quant_source_detail = f"filename regex (Encoding: '{encoding_from_filename_regex}')"
+            # else: Encoding is not a known quant type, so we don't use it.
+
+    if not quant_type_to_use:
+        quant_type_filename_guess = guess_quant_type_from_name(model_filepath.name) # Fallback to full filename
+        if quant_type_filename_guess:
+            quant_type_to_use = quant_type_filename_guess
+            quant_source_detail = "guessed from full filename"
+
+    if quant_type_to_use:
         print(f"   Quantization: {quant_type_to_use} (from {quant_source_detail})")
-    elif quant_type_filename:
-        quant_type_to_use = quant_type_filename
-        print(f"   Quantization: {quant_type_to_use} (from guessed from filename)")
-        if raw_meta_quant_value is not None and not isinstance(raw_meta_quant_value, str):
-             print(f"      (Metadata field for quantization was: {raw_meta_quant_value})")
-        elif raw_meta_quant_value is None and not quant_from_meta_str : # Only if metadata keys were truly not found
-             print(f"      (Relevant metadata fields for quantization not found or did not yield a string)")
+        if "filename" in quant_source_detail or "guessed" in quant_source_detail or "Encoding" in quant_source_detail:
+            meta_qv = fields.get("general.quantization_version")
+            meta_ft = fields.get("general.file_type")
+            if meta_qv is not None or meta_ft is not None:
+                 print(f"      (Metadata quant fields: version='{meta_qv}', file_type='{meta_ft}')")
     else:
         print("   ⚠️ Warning: Could not determine quantization type. Parameter recommendations may be inaccurate.")
-        if raw_meta_quant_value is not None and not isinstance(raw_meta_quant_value, str):
-             print(f"      (Metadata field for quantization was: {raw_meta_quant_value})")
-        elif raw_meta_quant_value is None: # Both metadata attempts yielded None
-             print(f"      (Relevant metadata fields for quantization not found)")
-    
-    # Store for later use
+        meta_qv = fields.get("general.quantization_version")
+        meta_ft = fields.get("general.file_type")
+        encoding_rgx = parsed_filename_parts.get('Encoding') if parsed_filename_parts else None
+        print(f"      (Metadata: version='{meta_qv}', file_type='{meta_ft}'. Regex Encoding='{encoding_rgx}')")
+
+    # Display other parsed filename components
+    if parsed_filename_parts:
+        print("\n   📄 Additional Filename Components (from regex):")
+        other_parts = {
+            k: v for k, v in parsed_filename_parts.items() 
+            if v is not None and k not in ['BaseName', 'SizeLabel', 'Encoding']
+        }
+        if other_parts:
+            for key, value in sorted(other_parts.items()):
+                print(f"      {key}: {value}")
+        else:
+            print("      (None or already used/displayed)")
+            
     model_info = {
         "name": model_name_to_use,
         "architecture": arch_str,
         "size": model_size,
-        "quantization": quant_type_to_use # This must be updated with the final quant_type_to_use
+        "quantization": quant_type_to_use
     }
 
     # --- Gather System Info ---
