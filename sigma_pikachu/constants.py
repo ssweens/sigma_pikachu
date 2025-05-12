@@ -21,10 +21,12 @@ else:
 # Config files live under user directory in .config folder
 if sys.platform == "win32":
     USER_CONFIG_DIR = os.path.join(os.getenv('APPDATA'), 'sigma_pikachu')
+    USER_LOGS_DIR = os.path.join(os.getenv('LOCALAPPDATA'), 'sigma_pikachu')
 # elif sys.platform == "darwin": # macOS specific path
 # USER_CONFIG_DIR = os.path.join(os.getenv('HOME'), 'Library', 'Application Support', 'sigma_pikachu')
 else: # Linux and other Unix-like systems (including macOS if not using the specific path)
     USER_CONFIG_DIR = os.path.join(os.getenv('HOME'), '.config', 'sigma_pikachu')
+    USER_LOGS_DIR = os.path.join(os.getenv('HOME'), 'Library', 'Logs', 'sigma_pikachu')
 
 # Ensure the user config directory exists
 if not os.path.exists(USER_CONFIG_DIR):
@@ -32,10 +34,10 @@ if not os.path.exists(USER_CONFIG_DIR):
 
 CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "config.yaml")
 LLAMA_SERVER_CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "llama.cpp-python_config.json")
-LLAMA_SERVER_LOG_FILE = os.path.join(EXTERNAL_DIR, "server.log")
+LLAMA_SERVER_LOG_FILE = os.path.join(USER_LOGS_DIR, "server.log")
 
 LLAMA_SWAP_CMD = os.path.join(RESOURCE_DIR, "bin", "llama-swap")
-MCP_LOGS_DIR = os.path.join(EXTERNAL_DIR, "mcp_logs")
+MCP_LOGS_DIR = os.path.join(USER_LOGS_DIR, "mcp_logs")
 
 # Ensure the MCP logs directory exists
 if not os.path.exists(MCP_LOGS_DIR):
