@@ -1,50 +1,86 @@
 ---
-host: 0.0.0.0
-port: 9999
-models:
-- model: "/Users/ssweens/models/Qwen3-8B-Q8_0.gguf"
-  model_alias: Qwen3-8B
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: qwen
-- model: "/Users/ssweens/models/Qwen3-30B-A3B-Q4_K_M.gguf"
-  model_alias: Qwen3-30B
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: qwen
-- model: "/Users/ssweens/models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf"
-  model_alias: Josie
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: qwen
-- model: "/Users/ssweens/models/qwen2.5-coder-7b-instruct-q8_0.gguf"
-  model_alias: Qwen2.5-Coder-7B-Instruct
-  n_gpu_layers: 99
-  offload_kqv: true
-  n_threads: 32
-  n_ctx: 32768
-  chat_format: llama-2
-# - model: "/Volumes/RabbleFiles/Models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q4_K_M.gguf"
-#   model_alias: Josie4K_M
-#   n_gpu_layers: 99
-#   offload_kqv: true
-#   n_threads: 32
-#   n_ctx: 4096
-# - model: "/Volumes/RabbleFiles/Models/gemma3-12b-claude-3.7-sonnet-reasoning-distilled.Q8_0.gguf"
-#   model_alias: ClaudeSeek
-#   n_gpu_layers: 36
-#   offload_kqv: true
-#   n_threads: 24
-#   n_ctx: 0
-# - model: "/Volumes/RabbleFiles/Models/Qwen3-4B-Q8_0.gguf"
-#   model_alias: Qwen3-4B
-#   n_gpu_layers: 99
-#   offload_kqv: true
-#   n_threads: 24
-#   n_ctx: 0
+server_type: llama_cpp # Add this line to specify the default server type.  llama-swap also works
+
+llama:
+  host: 0.0.0.0
+  port: 9999
+  models:
+  - model: "/Users/ssweens/models/Qwen3-8B-Q8_0.gguf"
+    model_alias: Qwen3-8B
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: qwen
+  - model: "/Users/ssweens/models/Qwen3-30B-A3B-Q4_K_M.gguf"
+    model_alias: Qwen3-30B
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: qwen
+  - model: "/Users/ssweens/models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf"
+    model_alias: Josie
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: qwen
+  - model: "/Users/ssweens/models/qwen2.5-coder-7b-instruct-q8_0.gguf"
+    model_alias: Qwen2.5-Coder-7B-Instruct
+    n_gpu_layers: 99
+    offload_kqv: true
+    n_threads: 32
+    n_ctx: 32768
+    chat_format: llama-2
+  # - model: "/Volumes/RabbleFiles/Models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q4_K_M.gguf"
+  #   model_alias: Josie4K_M
+  #   n_gpu_layers: 99
+  #   offload_kqv: true
+  #   n_threads: 32
+  #   n_ctx: 4096
+  # - model: "/Volumes/RabbleFiles/Models/gemma3-12b-claude-3.7-sonnet-reasoning-distilled.Q8_0.gguf"
+  #   model_alias: ClaudeSeek
+  #   n_gpu_layers: 36
+  #   offload_kqv: true
+  #   n_threads: 24
+  #   n_ctx: 0
+  # - model: "/Volumes/RabbleFiles/Models/Qwen3-4B-Q8_0.gguf"
+  #   model_alias: Qwen3-4B
+  #   n_gpu_layers: 99
+  #   offload_kqv: true
+  #   n_threads: 24
+  #   n_ctx: 0
+
+llama_swap:
+  config_file: config.yaml # Path to the llama-swap specific config file
+  listen: :9999 # The address llama-swap will listen on
+
+# Configuration for Model Context Protocol (MCP) Servers
+# Each item in the list represents an MCP server that can be managed by the application.
+mcp_servers:
+  - alias: "Sequential Thinker Example" # A user-friendly name for the tray menu
+    # The full command to run the MCP server.
+    # Ensure paths are correct and the command is runnable from your terminal.
+    # Example uses 'uvx' (from uv) and 'npx'. Adjust as needed for your environment.
+    command: "uvx mcpo --port 9000 --api-key \"YOUR_API_KEY_HERE_IF_NEEDED\" -- npx -y @modelcontextprotocol/server-sequential-thinking"
+    enabled: true # Set to true to allow starting this server, false to disable it.
+  
+  - alias: "Custom Python MCP Server Example"
+    # Example for a locally developed Python MCP server.
+    # Replace with the actual command to run your server.
+    command: "python /path/to/your/custom_mcp_server.py --port 9001"
+    enabled: false
+
+  # - alias: "Another MCP Server"
+  #   command: "some_other_command --port 9002"
+  #   enabled: false
+
+# Configuration for the Socket Proxy Server
+# This server can optionally run to proxy requests, e.g., for model switching.
+proxy:
+  enabled: false # Set to true to enable the proxy server
+  listen_host: 127.0.0.1 # The host the proxy server will listen on
+  listen_port: 8888 # The port the proxy server will listen on
+  downstream_host: 127.0.0.1 # The host the proxy server will forward requests to (typically the model server)
+  downstream_port: 5000 # The port the proxy server will forward requests to (typically the model server)
