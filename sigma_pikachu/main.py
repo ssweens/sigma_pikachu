@@ -30,6 +30,7 @@ from PIL import Image, ImageDraw # Check for Pillow
 
 # Add our local bin directory to PATH for subprocess calls
 os.environ["PATH"] = os.pathsep.join([os.path.join(os.path.dirname(__file__), "bin"), os.environ["PATH"]])
+os.environ["DYLD_LIBRARY_PATH"] = os.pathsep.join([os.path.join(os.path.dirname(__file__), "lib"), os.environ.get("DYLD_LIBRARY_PATH", "")])
 
 def initial_setup_checks():
     """Perform initial checks, create directories, and ensure Pillow is available."""
