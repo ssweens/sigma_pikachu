@@ -5,6 +5,8 @@ import sys
 import subprocess
 from ..constants import CONFIG_FILE, DEFAULT_HOST, DEFAULT_LLAMA_PORT
 
+import requests
+
 class ConfigManager:
     DEFAULT_CONFIG = {
         "llama": {
@@ -135,6 +137,69 @@ class ConfigManager:
         model_aliases = [{"model_alias": alias} for alias in models_dict.keys()]
 
         return model_aliases
+    
+    def get_ollama_models(self):
+        """Gets the list of OLLAMA models by making a single attempt to the API."""
+        from requests.exceptions import RequestException
+
+        # Ensure the process_manager is available to check if ollama is even supposed to be running
+        # This import needs to be here to avoid circular dependencies at the module level
+        from ..services.process_manager import process_manager
+
+        if not process_manager.is_ollama_server_running():
+            # Don't even try to fetch if the server isn't considered running by our manager
+            # This helps avoid spamming requests if the server was intentionally stopped or failed to start
+            # print("Ollama server is not reported as running by ProcessManager. Skipping model fetch.")
+            return []
+
+        # The OLLAMA_HOST environment variable is set in ollama_manager.py
+        # We should ideally use that configured host and port.
+        # For now, assuming the default or the one set by OLLAMA_HOST in its environment.
+        # A more robust solution would be to get this from config if it's configurable
+        # or have ollama_manager expose the effective URL.
+        # Defaulting to localhost:9999 as per the original hardcoding.
+        # The OLLAMA_HOST env var in ollama_manager.py is "http://0.0.0.0:9999"
+        # For client requests, we should use 127.0.0.1 or localhost.
+        
+        current_config = self.get_config()
+        ollama_listen_address = current_config.get("ollama", {}).get("listen", "127.0.0.1:11434") # Default to common Ollama port
+        
+        # Construct the URL from the listen address
+        # If listen address is just ":port", assume localhost
+        if ollama_listen_address.startswith(":"):
+            ollama_host = "127.0.0.1"
+            ollama_port = ollama_listen_address[1:]
+        else:
+            parts = ollama_listen_address.split(":")
+            ollama_host = parts[0] if parts[0] else "127.0.0.1"
+            ollama_port = parts[1] if len(parts) > 1 else "11434" # Default port
+
+        # Ensure host is not 0.0.0.0 for client requests
+        if ollama_host == "0.0.0.0":
+            ollama_host = "127.0.0.1"
+
+        url = f"http://{ollama_host}:{ollama_port}/v1/models"
+
+        try:
+            # Short timeout for a quick check, as this can be called frequently by UI updates
+            r = requests.get(url, timeout=2) 
+            if r.status_code == 200:
+                json_models = r.json()
+                return [{"model_alias": model["id"]} for model in json_models.get("data", [])]
+            else:
+                # Don't print error if it's a connection error, as it might just not be ready
+                if r.status_code != 503: # 503 Service Unavailable might be common if starting
+                     print(f"Ollama API request failed. URL: {url}, Status: {r.status_code}, Response: {r.text[:100]}")
+                return []
+        except RequestException as e:
+            # This will catch connection errors, timeouts, etc.
+            # It's normal for this to happen if the server is starting up, so avoid noisy logs.
+            # print(f"Could not connect to Ollama server at {url}: {e}")
+            return []
+        except Exception as e:
+            print(f"An unexpected error occurred while fetching Ollama models from {url}: {e}")
+            return []
+        
 
 
 def open_config_file_externally(self):

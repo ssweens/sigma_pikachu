@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 # Ensure the package directory is in the Python path if running as a script
 if not getattr(sys, 'frozen', False): # Not running as a PyInstaller bundle

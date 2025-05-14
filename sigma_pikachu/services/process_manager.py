@@ -14,12 +14,14 @@ from .llama_server_manager import LlamaServerManager
 from .mcp_server_manager import McpServerManager
 from .proxy_server_manager import ProxyServerManager
 from .llama_swap_manager import LlamaSwapManager # Import the new manager class
+from .ollama_manager import OllamaManager # Import the OllamaManager class
 # Removed import of ui_manager to break circular dependency
 
 class ProcessManager:
     def __init__(self):
         self.llama_server_process = None
         self.llama_swap_process = None # Add process reference for llama-swap
+        self.ollama_process = None
         self.mcp_server_processes = {} # Stores {'alias': Popen_object}
         self.proxy_server = None # To hold the asyncio server instance
         self._proxy_loop = None # To hold the asyncio event loop for the proxy
@@ -30,6 +32,7 @@ class ProcessManager:
         # Instantiate the new manager classes
         self.llama_manager = LlamaServerManager(self)
         self.llama_swap_manager = LlamaSwapManager(self) # Instantiate LlamaSwapManager
+        self.ollama_manager = OllamaManager(self)
         self.mcp_manager = McpServerManager(self)
         # ProxyServerManager instance is created only if enabled in config
         self.proxy_manager = None
@@ -41,6 +44,7 @@ class ProcessManager:
         # Keep track of previous states to detect changes
         self._prev_llama_server_running = False
         self._prev_llama_swap_running = False
+        self._prev_ollama_server_running = False
         self._prev_mcp_server_running_states = {} # {'alias': bool}
 
         # Callback for UI updates, set after initialization
@@ -69,6 +73,16 @@ class ProcessManager:
 
     def stop_llama_swap(self):
         return self.llama_swap_manager.stop()
+    
+    # --- Ollama Server Management ---
+    def is_ollama_server_running(self):
+        return self.ollama_manager.is_running()
+    
+    def start_ollama_server(self):
+        return self.ollama_manager.start()
+    
+    def stop_ollama_server(self):
+        return self.ollama_manager.stop()
 
     # --- MCP Server Management ---
     def is_mcp_server_running(self, alias):
@@ -112,6 +126,9 @@ class ProcessManager:
         elif server_type == "llama_swap":
             print("Configured server type: llama_swap. Starting Llama-swap server...")
             self.llama_swap_manager.start()
+        elif server_type == "ollama":
+            print("Configured server type: ollama. Starting Ollama server...")
+            self.ollama_manager.start()
         else:
             print(f"Warning: Unknown server_type '{server_type}' in config.yaml. Not starting a model server.")
 
@@ -185,6 +202,7 @@ class ProcessManager:
         # Stop both managers; they handle if their process is running
         self.llama_manager.stop()
         self.llama_swap_manager.stop() # Stop llama-swap manager
+        self.ollama_manager.stop() # Stop Ollama manager
         self.mcp_manager.stop_all()
         # Stop the proxy server only if it was started
         if self.proxy_manager is not None:
@@ -211,7 +229,13 @@ class ProcessManager:
                 print(f"ProcessMonitor: Llama-swap server state changed to {current_llama_swap_running}. Requesting UI update.")
                 ui_update_needed = True
                 self._prev_llama_swap_running = current_llama_swap_running
-
+                
+            # Check Ollama Server
+            current_ollama_server_running = self.is_ollama_server_running()
+            if current_ollama_server_running != self._prev_ollama_server_running:
+                print(f"ProcessMonitor: Ollama server state changed to {current_ollama_server_running}. Requesting UI update.")
+                ui_update_needed = True
+                self._prev_ollama_server_running = current_ollama_server_running
             # Check MCP Servers
             current_mcp_server_running_states = {}
             with self._lock: # Lock when accessing mcp_server_processes

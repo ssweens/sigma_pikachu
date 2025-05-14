@@ -60,6 +60,15 @@ class UIManager:
             if process_manager.is_llama_swap_running():
                 return f"Llama Swap: Running ({host}:{port})"
             return "Llama Swap: Stopped"
+        elif server_type == "ollama":
+            ollama_listen = current_config.get("ollama", {}).get("listen", ":11434")
+            # Simple split for display, assumes format :port or host:port
+            host, port_str = ollama_listen.split(":") if ":" in ollama_listen else ('127.0.0.1', ollama_listen)
+            port = port_str if port_str else '11434' # Default port if not specified
+
+            if process_manager.is_ollama_server_running():
+                return f"Ollama: Running ({host}:{port})"
+            return "Ollama: Stopped"
         else:
             return f"Model Server: Unknown Type ({server_type})"
 
@@ -72,6 +81,8 @@ class UIManager:
             return "Stop Llama CPP Server" if process_manager.is_llama_server_running() else "Start Llama CPP Server"
         elif server_type == "llama_swap":
             return "Stop Llama Swap Server" if process_manager.is_llama_swap_running() else "Start Llama Swap Server"
+        elif server_type == "ollama":
+            return "Stop Ollama Server" if process_manager.is_ollama_server_running() else "Start Ollama Server"
         else:
             return "Toggle Model Server (Unknown Type)"
 
@@ -84,6 +95,9 @@ class UIManager:
             models = config_manager.get_llama_models() # Reads from 'llama' section
         elif server_type == "llama_swap":
             models = config_manager.get_llama_swap_models() # Reads from llama-swap config file
+        elif server_type == "ollama":
+            # Assuming a similar method exists for Ollama models
+            models = config_manager.get_ollama_models()
 
         if not models:
             return pystray.Menu(pystray.MenuItem("No models configured", None, enabled=False))
@@ -106,6 +120,9 @@ class UIManager:
         elif server_type == "llama_swap":
             # Visible if llama_swap server is running and models are configured in llama-swap config
             return process_manager.is_llama_swap_running() and bool(config_manager.get_llama_swap_models())
+        elif server_type == "ollama":
+            # Visible if ollama server is running and models are configured under 'ollama:'
+            return process_manager.is_ollama_server_running() and bool(config_manager.get_ollama_models())
         else:
             return False # Not visible for unknown server types
 
@@ -206,6 +223,11 @@ class UIManager:
                     process_manager.stop_llama_swap()
                 else:
                     process_manager.start_llama_swap()
+            elif server_type == "ollama":
+                if process_manager.is_ollama_server_running():
+                    process_manager.stop_ollama_server()
+                else:
+                    process_manager.start_ollama_server()
             else:
                 print(f"Warning: Cannot toggle unknown server type: {server_type}")
 
