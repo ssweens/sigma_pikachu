@@ -41,6 +41,7 @@ class LlamaSwapManager:
                 LLAMA_SWAP_CMD,
                 "--config", llama_swap_config_path,
                 "--listen", listen_address,
+                "--watch-config"
             ]
 
             # Use shlex.quote for printing the command to handle spaces/special chars in arguments

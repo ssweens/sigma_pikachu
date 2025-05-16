@@ -18,11 +18,42 @@ def open_file_externally(file_path):
                 return
 
         if sys.platform == "win32":
-            os.startfile(file_path)
+            if file_path.endswith(".log"):
+                # For Windows, opening in a new command prompt and tailing is complex.
+                # We'll stick to os.startfile for logs, which might open in Notepad or default log viewer.
+                # A more advanced solution might involve powershell:
+                # subprocess.run(['powershell', '-Command', f'Start-Process cmd -ArgumentList "/k tail -f -n 40 {file_path}"'], check=True)
+                # For now, keeping it simple.
+                os.startfile(file_path)
+            else:
+                os.startfile(file_path)
         elif sys.platform == "darwin":
-            subprocess.run(["open", file_path], check=True)
+            if file_path.endswith(".log"):
+                # Open log files in a new Terminal window with tail
+                subprocess.run([
+                    'osascript',
+                    '-e', 'tell app "Terminal" to do script "clear; tail -f -n 40 ' + file_path.replace('"', '\\"') + '"'
+                ], check=True)
+            else:
+                subprocess.run(["open", file_path], check=True)
         else:  # linux variants
-            subprocess.run(["xdg-open", file_path], check=True)
+            if file_path.endswith(".log"):
+                # Attempt to open in a new terminal with tail for Linux
+                # This depends on having a common terminal emulator like gnome-terminal, xterm, etc.
+                # Using 'x-terminal-emulator' which is a Debian alternatives system link
+                try:
+                    subprocess.run([
+                        'x-terminal-emulator', '-e', f'sh -c "tail -f -n 40 {file_path}; exec sh"'
+                    ], check=True)
+                except FileNotFoundError:
+                    # Fallback if x-terminal-emulator is not found or fails
+                    print(f"Could not open terminal with tail for {file_path}. Opening with xdg-open.")
+                    subprocess.run(["xdg-open", file_path], check=True)
+                except Exception as e:
+                    print(f"Failed to open terminal with tail for {file_path}: {e}. Opening with xdg-open.")
+                    subprocess.run(["xdg-open", file_path], check=True)
+            else:
+                subprocess.run(["xdg-open", file_path], check=True)
         print(f"Opened {file_path}")
     except Exception as e:
         print(f"Failed to open {file_path}: {e}")

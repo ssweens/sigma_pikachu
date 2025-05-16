@@ -14,7 +14,7 @@ OLLAMA_ENV = {
     "OLLAMA_FLASH_ATTENTION": "true",
     "OLLAMA_MAX_LOADED_MODELS": "1",
     "OLLAMA_HOST": "http://0.0.0.0:9999",
-    "OLLAMA_MODELS": "/Users/ssweens/models",
+    "OLLAMA_MODELS": None,
 }
 
 class OllamaManager:
@@ -44,6 +44,9 @@ class OllamaManager:
 
             ollama_config_path = current_config.get("ollama", {}).get("config_file", "config.yaml")
             listen_address = current_config.get("ollama", {}).get("listen", ":9999")
+            model_path = current_config.get("ollama", {}).get("model_path")
+            if model_path:
+                OLLAMA_ENV["OLLAMA_MODELS"] = model_path
 
             command = [
                 "ollama",  # Now just the executable, not the env string
