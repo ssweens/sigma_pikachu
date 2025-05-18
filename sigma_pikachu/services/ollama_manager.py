@@ -15,6 +15,7 @@ OLLAMA_ENV = {
     "OLLAMA_MAX_LOADED_MODELS": "1",
     "OLLAMA_HOST": "http://0.0.0.0:9999",
     "OLLAMA_MODELS": None,
+    "OLLAMA_KEEP_ALIVE": "15m0s"
 }
 
 class OllamaManager:

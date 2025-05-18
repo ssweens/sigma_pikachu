@@ -87,26 +87,61 @@ class UIManager:
             return "Toggle Model Server (Unknown Type)"
 
     def _get_llama_models_menu(self, item):
+        import threading
+
         current_config = config_manager.get_config()
         server_type = current_config.get("server_type", "llama_swap").lower()
 
-        models = []
-        if server_type == "llama_cpp":
-            models = config_manager.get_llama_models() # Reads from 'llama' section
-        elif server_type == "llama_swap":
-            models = config_manager.get_llama_swap_models() # Reads from llama-swap config file
-        elif server_type == "ollama":
-            # Assuming a similar method exists for Ollama models
-            models = config_manager.get_ollama_models()
+        # Helper to check if the relevant server is running
+        def is_server_running():
+            if server_type == "llama_cpp":
+                return process_manager.is_llama_server_running()
+            elif server_type == "llama_swap":
+                return process_manager.is_llama_swap_running()
+            elif server_type == "ollama":
+                return process_manager.is_ollama_server_running()
+            return False
 
+        # Helper to get models for the current server type
+        def get_models():
+            if server_type == "llama_cpp":
+                return config_manager.get_llama_models()
+            elif server_type == "llama_swap":
+                return config_manager.get_llama_swap_models()
+            elif server_type == "ollama":
+                return config_manager.get_ollama_models()
+            return []
+
+        # If server is not running, start a polling thread and show "Loading models..."
+        if not is_server_running():
+            print("[UIManager] Server not running for model menu. Starting poll thread.")
+            def poll_for_server():
+                max_retries = 20
+                retries = 0
+                while retries < max_retries:
+                    if is_server_running():
+                        print("[UIManager] Server is now running. Triggering menu update.")
+                        threading.Timer(0.1, self._update_menu_async).start()
+                        return
+                    time.sleep(0.5)
+                    retries += 1
+                print("[UIManager] Server did not start in time for model menu.")
+                threading.Timer(0.1, self._update_menu_async).start()
+            # Start polling in background if not already polling
+            threading.Thread(target=poll_for_server, daemon=True).start()
+            return pystray.Menu(pystray.MenuItem("Loading models...", None, enabled=False))
+
+        # Server is running, get models
+        models = get_models()
+        print(f"[UIManager] Server running: {server_type}. Models returned: {models}")
         if not models:
+            print("[UIManager] No models configured or models list is empty.")
             return pystray.Menu(pystray.MenuItem("No models configured", None, enabled=False))
 
         model_sub_items = []
         for model_info in models:
-            # Assuming model_info is a dict with 'model_alias' or similar
-            # Adjust key access based on actual llama-swap config structure if needed
-            alias = model_info.get("model_alias", model_info.get("model", "Unknown Model")) # Try 'model_alias' then 'model'
+            alias = model_info.get("model_alias", model_info.get("model", "Unknown Model"))
+            print(f"[UIManager] Adding model to menu: {alias}")
             model_sub_items.append(pystray.MenuItem(alias, None, enabled=False))
         return pystray.Menu(*model_sub_items)
 
