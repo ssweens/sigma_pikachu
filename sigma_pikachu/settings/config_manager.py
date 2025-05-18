@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import subprocess
+import time # Added for retry delay
 from ..constants import CONFIG_FILE, DEFAULT_HOST, DEFAULT_LLAMA_PORT
 
 import requests
@@ -139,7 +140,7 @@ class ConfigManager:
         return model_aliases
     
     def get_ollama_models(self):
-        """Gets the list of OLLAMA models by making a single attempt to the API."""
+        """Gets the list of OLLAMA models by making attempts to the API with retries."""
         from requests.exceptions import RequestException
 
         # Ensure the process_manager is available to check if ollama is even supposed to be running
@@ -147,59 +148,58 @@ class ConfigManager:
         from ..services.process_manager import process_manager
 
         if not process_manager.is_ollama_server_running():
-            # Don't even try to fetch if the server isn't considered running by our manager
-            # This helps avoid spamming requests if the server was intentionally stopped or failed to start
             # print("Ollama server is not reported as running by ProcessManager. Skipping model fetch.")
             return []
 
-        # The OLLAMA_HOST environment variable is set in ollama_manager.py
-        # We should ideally use that configured host and port.
-        # For now, assuming the default or the one set by OLLAMA_HOST in its environment.
-        # A more robust solution would be to get this from config if it's configurable
-        # or have ollama_manager expose the effective URL.
-        # Defaulting to localhost:9999 as per the original hardcoding.
-        # The OLLAMA_HOST env var in ollama_manager.py is "http://0.0.0.0:9999"
-        # For client requests, we should use 127.0.0.1 or localhost.
-        
         current_config = self.get_config()
         ollama_listen_address = current_config.get("ollama", {}).get("listen", "127.0.0.1:11434") # Default to common Ollama port
         
-        # Construct the URL from the listen address
-        # If listen address is just ":port", assume localhost
         if ollama_listen_address.startswith(":"):
             ollama_host = "127.0.0.1"
             ollama_port = ollama_listen_address[1:]
         else:
             parts = ollama_listen_address.split(":")
             ollama_host = parts[0] if parts[0] else "127.0.0.1"
-            ollama_port = parts[1] if len(parts) > 1 else "11434" # Default port
+            ollama_port = parts[1] if len(parts) > 1 else "11434"
 
-        # Ensure host is not 0.0.0.0 for client requests
         if ollama_host == "0.0.0.0":
             ollama_host = "127.0.0.1"
 
-        url = f"http://{ollama_host}:{ollama_port}/v1/models"
-
-        try:
-            # Short timeout for a quick check, as this can be called frequently by UI updates
-            r = requests.get(url, timeout=2) 
-            if r.status_code == 200:
-                json_models = r.json()
-                return [{"model_alias": model["id"]} for model in json_models.get("data", [])]
-            else:
-                # Don't print error if it's a connection error, as it might just not be ready
-                if r.status_code != 503: # 503 Service Unavailable might be common if starting
-                     print(f"Ollama API request failed. URL: {url}, Status: {r.status_code}, Response: {r.text[:100]}")
-                return []
-        except RequestException as e:
-            # This will catch connection errors, timeouts, etc.
-            # It's normal for this to happen if the server is starting up, so avoid noisy logs.
-            # print(f"Could not connect to Ollama server at {url}: {e}")
-            return []
-        except Exception as e:
-            print(f"An unexpected error occurred while fetching Ollama models from {url}: {e}")
-            return []
+        # The Ollama API endpoint for listing local models is typically /api/tags or /v1/models
+        # Using /api/tags as it's commonly seen in Ollama examples for local model listing.
+        # The official API docs suggest /api/tags for listing local models.
+        # The /v1/models endpoint might be for a different purpose or newer API versions.
+        # Let's stick to /api/tags for now as per the original simpler version,
+        # but ensure the response parsing matches its structure.
+        url = f"http://{ollama_host}:{ollama_port}/api/tags"
         
+        max_retries = 5
+        retry_delay_seconds = 1
+        request_timeout_seconds = 2
+
+        for attempt in range(max_retries):
+            try:
+                r = requests.get(url, timeout=request_timeout_seconds)
+                if r.status_code == 200:
+                    json_response = r.json()
+                    # Ollama /api/tags returns a list of models directly under a "models" key.
+                    # Each model object has a "name" field (e.g., "llama2:latest").
+                    return [{"model_alias": model["name"]} for model in json_response.get("models", [])]
+                elif r.status_code == 503: # Service Unavailable
+                    print(f"Ollama API at {url} returned status 503 (Attempt {attempt + 1}/{max_retries}). Retrying in {retry_delay_seconds}s...")
+                else:
+                    print(f"Ollama API request failed. URL: {url}, Status: {r.status_code}, Response: {r.text[:100]}")
+                    return [] # Non-retryable error or final attempt failed
+            except (RequestException, ConnectionError, TimeoutError) as e:
+                print(f"Could not connect to Ollama server at {url} (Attempt {attempt + 1}/{max_retries}): {e}")
+            
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay_seconds)
+            else:
+                print(f"Failed to fetch Ollama models from {url} after {max_retries} attempts.")
+                return []
+        
+        return [] # Should be unreachable if loop logic is correct, but as a fallback.
 
 
 def open_config_file_externally(self):
