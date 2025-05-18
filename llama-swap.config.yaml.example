@@ -1,21 +1,218 @@
+healthCheckTimeout: 90
+logLevel: debug
+startPort: 10001
 models:
+  # Use ollama for streaming clients that want to use tools or just easy configs we don't want to tune
+  # but be sure to pull it into ollama
+  "llama3.1:8b":
+    proxy: http://0.0.0.0:11001
+    checkEndpoint: /api/version
+    # Use ollama for tools that need streaming or just easy configs we don't want to tune
+    env:
+      - OLLAMA_DEBUG=1
+      - OLLAMA_HOST=http://0.0.0.0:11001
+      - OLLAMA_MODELS=/Volumes/RabbleFiles/Models
+      - OLLAMA_LOAD_TIMEOUT=15m0s
+      - OLLAMA_CONTEXT_LENGTH=32768
+      - OLLAMA_FLASH_ATTENTION=true
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - HOME=.
+    cmd: >
+      ./sigma_pikachu/bin/ollama serve 
+  "Mistral-Small-3.1-24B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf
+      --jinja --ctx-size 16384 -ngl 99 -fa
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Sigma_Pikachu-Mistral-Nemo":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/Mistral-Nemo-Instruct-2407-Q4_K_M.gguf
+      --jinja --ctx-size 16384 -ngl 99 -fa
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "nvidia_OpenCodeReasoning-Nemotron-14B-Q4_K_M.gguf":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/nvidia_OpenCodeReasoning-Nemotron-14B-Q4_K_M.gguf
+      --jinja --ctx-size 16384 -ngl 99 -fa
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Codestral-22B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/Codestral-22B-v0.1-Q6_K.gguf
+      --jinja --ctx-size 16384 -ngl 99 -fa
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Llama3.1_Nemotron_8B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/Llama-3.1-Nemotron-Nano-8B-v1-Q4_K_M.gguf
+      --jinja --ctx-size 16384 -ngl 99 -fa
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Phi-4_Reasoning_Plus":
+    proxy: http://127.0.0.1:${PORT}
+    ## from MSFT/HuggingFace/Unsloth: https://docs.unsloth.ai/basics/tutorials-how-to-fine-tune-and-run-llms/phi-4-reasoning-how-to-run-and-fine-tune
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/Phi-4-reasoning-plus-Q4_K_M.gguf
+      --jinja -ngl 99 -fa -sm row --temp 0.8 --top-k 50 --top-p 0.95 --min-p 0.00 --seed 3407 --prio 3 -c 32768 -n 32768 
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Gemma-27B":
+    proxy: http://127.0.0.1:${PORT}
+    ## from MSFT/HuggingFace/Unsloth: https://docs.unsloth.ai/basics/tutorials-how-to-fine-tune-and-run-llms/gemma-27b-how-to-run-and-fine-tune
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/gemma3/gemma-3-27b-it-Q4_K_M.gguf
+      --jinja --ctx-size 16384 -ngl 99 -fa --seed 3407 --prio 2 --temp 1.0  --repeat-penalty 1.0 --min-p 0.01 --top-k 64 --top-p 0.95
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  # "Gemma-27B-Vision/Conversation":
+  #   proxy: http://127.0.0.1:${PORT}
+  #   ## from MSFT/HuggingFace/Unsloth: https://docs.unsloth.ai/basics/tutorials-how-to-fine-tune-and-run-llms/gemma-27b-how-to-run-and-fine-tune
+  #   cmd: >
+  #     llama-server
+  #     -m /Volumes/RabbleFiles/Models/gemma3/gemma-3-27b-it-Q4_K_M.gguf
+  #     --mmproj /Volumes/RabbleFiles/Models/mmproj-BF16.gguf
+  #     --ctx-size 16384 -ngl 99 -fa --seed 3407 --prio 2 --temp 1.0  --repeat-penalty 1.0 --min-p 0.01 --top-k 64 --top-p 0.95
+  #     --threads 10
+  #     --port ${PORT}
+  "Gemma-12B":
+    proxy: http://127.0.0.1:${PORT}
+    ## from MSFT/HuggingFace/Unsloth: https://docs.unsloth.ai/basics/tutorials-how-to-fine-tune-and-run-llms/gemma-27b-how-to-run-and-fine-tune
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/gemma3/gemma-3-12b-it-Q6_K.gguf
+      --jinja --ctx-size 16384 -ngl 99 -fa --seed 3407 --prio 2 --temp 1.0  --repeat-penalty 1.0 --min-p 0.01 --top-k 64 --top-p 0.95
+      --threads 10
+      --port ${PORT}
   "Josie":
-    proxy: "http://127.0.0.1:10000"
+    proxy: http://127.0.0.1:${PORT}
     cmd: >
       llama-server
       -m /Volumes/RabbleFiles/Models/Goekdeniz-Guelmez_Josiefied-Qwen3-8B-abliterated-v1-Q8_0.gguf
-      --threads 32
-      --port 10000
-  "Qwen3-30B":
-    proxy: "http://127.0.0.1:10000"
+      --jinja --reasoning-format deepseek -ngl 99 -fa -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 -c 40960 -n 32768 --no-context-shift
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Qwen3-30B-A3B":
+    proxy: http://127.0.0.1:${PORT}
+     ## from Qwen/Unsloth directly
+      ## Use -ot ".ffn_.*_exps.=CPU" to offload all MoE layers to the CPU! 
+      ## This effectively allows you to fit all non MoE layers on 1  GPU, improving generation speeds. 
+      ## You can customize the regex expression to fit more layers if you have more GPU capacity.
+      # Unsloth varies, also uses this: --ctx-size 16384
     cmd: >
-      llama-server -m /Volumes/RabbleFiles/Models/Qwen3-30B-A3B-Q4_K_M.gguf --threads 32 --ctx-size 16384 --n-gpu-layers 99 --port 10000
+      llama-server
+      -m /Volumes/RabbleFiles/Models/qwen3/Qwen3-30B-A3B-Q4_K_M.gguf
+      --jinja --reasoning-format deepseek 
+      -ngl 99 
+      -fa 
+      -sm row 
+      --temp 0.6 
+      --top-k 20 
+      --top-p 0.95 
+      --min-p 0 
+      -c 16384
+      -n -1
+      --no-context-shift 
+      -ot ".ffn_.*_exps.=CPU" 
+      --seed 3407 
+      --prio 3
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Qwen3-32B":
+   ## from Qwen directly
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/qwen3/Qwen3-32B-Q4_K_M.gguf
+      --jinja --reasoning-format deepseek -ngl 99 -fa -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 -c 40960 -n 32768 --no-context-shift
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Qwen3-14B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server
+      -m /Volumes/RabbleFiles/Models/Qwen3-14B-Q6_K.gguf
+      --jinja --reasoning-format deepseek -ngl 99 -fa -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 -c 40960 -n 32768 --no-context-shift
+      --threads 10
+      --port ${PORT}
+  "Qwen3-8B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/qwen3/Qwen3-8B-UD-Q6_K_XL.gguf
+      --jinja --reasoning-format deepseek -ngl 99 -fa -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 -c 40960 -n 32768 --no-context-shift
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Qwen3-4B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/qwen3/Qwen3-4B-Q6_K.gguf
+      --jinja --reasoning-format deepseek -ngl 99 -fa -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 -c 40960 -n 32768 --no-context-shift
+      --threads 10
+      --port ${PORT}
+      --no-warmup
+  "Qwen3-1.7B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/qwen3/Qwen3-1.7B-BF16.gguf
+      --jinja --reasoning-format deepseek -ngl 99 -fa -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 -c 40960 -n 32768 --no-context-shift
+      --threads 10
+      --port ${PORT}
+  "Qwen2.5-Coder-32B-Instruct":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
+      --threads 10
+      --ctx-size 32768 --n-gpu-layers 99 -fa
+      --port ${PORT}
+      --no-warmup
+  "Qwen2.5-Coder-14B-Instruct":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf
+      --threads 10
+      --ctx-size 32768 --n-gpu-layers 99 -fa
+      --port ${PORT}
+      --no-warmup
   "Qwen2.5-Coder-7B-Instruct":
-    proxy: "http://127.0.0.1:10000"
+    proxy: http://127.0.0.1:${PORT}
     cmd: >
-      llama-server -m /Volumes/RabbleFiles/Models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf --threads 32 --ctx-size 32768 --n-gpu-layers 99 --port 10000
-
-
+      llama-server -m /Volumes/RabbleFiles/Models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+      --threads 10
+      --ctx-size 32768 --n-gpu-layers 99 -fa
+      --port ${PORT}
+      --no-warmup
+  "Deepseek R1/Lllama-8B":
+    proxy: http://127.0.0.1:${PORT}
+    cmd: >
+      llama-server -m /Volumes/RabbleFiles/Models/DeepSeek-R1-Distill-Llama-8B-F16.gguf
+      --threads 10
+      --ctx-size 32768
+      --n-gpu-layers 16
+      --port ${PORT}
+      --no-warmup
 
 
 
