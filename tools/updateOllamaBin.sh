@@ -1,0 +1,1 @@
+cd ~/src/ollama && git pull && go build . && cp ollama ../sigma_pikachu/sigma_pikachu/bin

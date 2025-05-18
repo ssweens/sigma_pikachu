@@ -10,12 +10,13 @@ from ..settings.config_manager import config_manager # Singleton instance
 OLLAMA_ENV = {
     "OLLAMA_DEBUG": "1",
     "OLLAMA_LOAD_TIMEOUT": "15m0s",
-    "OLLAMA_CONTEXT_LENGTH": "32768",
+    "OLLAMA_CONTEXT_LENGTH": "16384",
     "OLLAMA_FLASH_ATTENTION": "true",
     "OLLAMA_MAX_LOADED_MODELS": "1",
     "OLLAMA_HOST": "http://0.0.0.0:9999",
     "OLLAMA_MODELS": None,
-    "OLLAMA_KEEP_ALIVE": "15m0s"
+    "OLLAMA_KEEP_ALIVE": "15m0s",
+    #"OLLAMA_GPU_OVERHEAD": str(2.5 * 1024 * 1024 * 1024) # 2.5GB
 }
 
 class OllamaManager:
