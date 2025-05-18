@@ -118,7 +118,11 @@ models:
       ## Use -ot ".ffn_.*_exps.=CPU" to offload all MoE layers to the CPU! 
       ## This effectively allows you to fit all non MoE layers on 1  GPU, improving generation speeds. 
       ## You can customize the regex expression to fit more layers if you have more GPU capacity.
-      # Unsloth varies, also uses this: --ctx-size 16384
+      # Unsloth varies, also uses this: --ctx-size 16384... seems like 40960 is ideal
+      #  --no-context-shift 
+      # -ot ".ffn_.*_exps.=CPU" 
+      # --seed 3407 
+      # --prio 3
     cmd: >
       llama-server
       -m /Volumes/RabbleFiles/Models/qwen3/Qwen3-30B-A3B-Q4_K_M.gguf
@@ -130,15 +134,14 @@ models:
       --top-k 20 
       --top-p 0.95 
       --min-p 0 
-      -c 16384
+      -c 24576
       -n -1
-      --no-context-shift 
-      -ot ".ffn_.*_exps.=CPU" 
-      --seed 3407 
-      --prio 3
       --threads 10
       --port ${PORT}
       --no-warmup
+      --no-context-shift 
+      --seed 3407 
+      --prio 3
   "Qwen3-32B":
    ## from Qwen directly
     proxy: http://127.0.0.1:${PORT}
