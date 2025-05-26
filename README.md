@@ -24,3 +24,11 @@ OpenMP_ROOT=$(brew --prefix)/opt/libomp FORCE_CMAKE="1" CMAKE_ARGS="-DCMAKE_OSX_
  - launchctl print gui/501/com.example.SigmaPikachu
  - .. to ensure it's running
 
+ To benchmark the system:
+ - run python tools/benchmark_threads.py
+
+ ## Build
+ - Ollama
+ brew upgrade ollama && cp /opt/homebrew/opt/ollama/bin/ollama ./sigma_pikachu/bin/
+
+
