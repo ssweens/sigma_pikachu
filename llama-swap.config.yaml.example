@@ -25,6 +25,7 @@ models:
       llama-server
       -m /Volumes/RabbleFiles/Models/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf
       --jinja --ctx-size 16384 -ngl 99 -fa
+      --cache-type-k q4_0 --cache-type-v q4_0
       --threads 10
       --port ${PORT}
       --no-warmup

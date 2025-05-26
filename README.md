@@ -17,3 +17,10 @@ OpenMP_ROOT=$(brew --prefix)/opt/libomp FORCE_CMAKE="1" CMAKE_ARGS="-DCMAKE_OSX_
     - https://github.com/upstash/context7
  - Fix the config to not load the MCP and others when pushing to llama
 
+ To run as a service:
+ - edit the sigma_pikachu.plist for the correct paths
+ - cp ./sigma_pikachu.plist ~/Library/LaunchAgents
+ - launchctl load ~/Library/LaunchAgents/sigma_pikachu.plist   
+ - launchctl print gui/501/com.example.SigmaPikachu
+ - .. to ensure it's running
+
