@@ -20,4 +20,6 @@ dependencies = [
     "requests>=2.32.3",
     "openai>=1.78.1",
     "matplotlib>=3.10.3",
+    "mcp-proxy>=0.7.0",
+    "ipython>=9.2.0",
 ]

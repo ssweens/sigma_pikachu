@@ -31,4 +31,6 @@ OpenMP_ROOT=$(brew --prefix)/opt/libomp FORCE_CMAKE="1" CMAKE_ARGS="-DCMAKE_OSX_
  - Ollama
  brew upgrade ollama && cp /opt/homebrew/opt/ollama/bin/ollama ./sigma_pikachu/bin/
 
-
+- and set perms
+sudo xattr -dr com.apple.quarantine ~/src/sigma_pikachu/sigma_pikachu/bin/*
+sudo xattr -dr com.apple.quarantine ~/src/sigma_pikachu/sigma_pikachu/lib/*
