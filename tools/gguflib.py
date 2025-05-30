@@ -506,7 +506,7 @@ if __name__ == "__main__":
     # Scan the directory for GGUF files
     gguf_files = [os.path.join(root, file) for root, _, files in os.walk(gguf_file_path) for file in files if file.endswith(".gguf")]
     lsGGMLTypes = defaultdict(int)
-    for gguf_file_path in gguf_files[:3]:
+    for gguf_file_path in gguf_files:
         print(f"\nProcessing GGUF file: {gguf_file_path}")
         with open(gguf_file_path, "rb") as f:
             info, tensorinfo = load_gguf(f)
