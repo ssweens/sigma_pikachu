@@ -37,7 +37,7 @@ LLAMA_SERVER_LOG_FILE = os.path.join(USER_LOGS_DIR, "server.log")
 
 LLAMA_SERVER_CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "llama.cpp-python_config.json")
 
-LLAMA_SWAP_CMD = os.path.join(RESOURCE_DIR, "bin", "llama-swap")
+LLAMA_SWAP_CMD = os.path.join(RESOURCE_DIR, "bin", "corral")
 
 OLLAMA_CMD = "ollama"
 
