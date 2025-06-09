@@ -62,31 +62,47 @@ if llama_zip_path:
 else:
     print("No llama-*.zip file found in _drop directory.")
 
-# --- Handle llama-swap*.tar.gz file ---
-llama_swap_tar_gz_path = None
-for f in os.listdir(drop_dir):
-    if f.startswith('llama-swap') and f.endswith('.tar.gz'):
-        llama_swap_tar_gz_path = os.path.join(drop_dir, f)
-        break
+# Copy corral from ~/src/corral to sigma_pikachu/bin
+corral_source_path = os.path.expanduser('~/src/corral/target/release/corral')
+corral_destination_path = os.path.join(bin_dir, 'corral')
+if os.path.exists(corral_source_path):
+    shutil.copy(corral_source_path, corral_destination_path)
+    os.chmod(corral_destination_path, 0o755)
+    print(f"Copied and made executable {corral_source_path} to {corral_destination_path}")
 
-if llama_swap_tar_gz_path:
-    print(f"Processing {llama_swap_tar_gz_path}...")
-    with tarfile.open(llama_swap_tar_gz_path, 'r:gz') as tar_ref:
-        for member in tar_ref.getmembers():
-            # 3) From the llama-swap*.tar.gz, copy llama-swap to sigma_pikachu/bin
-            if os.path.basename(member.name) == 'llama-swap':
-                source_path = os.path.join(temp_extract_dir, member.name)
-                tar_ref.extract(member, temp_extract_dir)
-                destination_path = os.path.join(bin_dir, 'llama-swap')
-                if os.path.exists(destination_path):
-                    os.remove(destination_path)
-                    print(f"Overwriting existing file: {destination_path}")
-                shutil.move(source_path, destination_path)
-                # Make executable
-                os.chmod(destination_path, 0o755)
-                print(f"Copied and made executable llama-swap to {bin_dir}")
-else:
-    print("No llama-swap*.tar.gz file found in _drop directory.")
+# Copy toolshed from ~/src/toolshed to sigma_pikachu/bintoolshed_source_path = os.path.expanduser('~/src/toolshed/toolshed')
+toolshed_destination_path = os.path.join(bin_dir, 'toolshed')
+toolshed_source_path = os.path.expanduser('~/src/toolshed/target/release/toolshed')
+if os.path.exists(toolshed_source_path):
+    shutil.copy(toolshed_source_path, toolshed_destination_path)
+    os.chmod(toolshed_destination_path, 0o755)
+    print(f"Copied and made executable {toolshed_source_path} to {toolshed_destination_path}")
+
+# --- Handle llama-swap*.tar.gz file ---
+# llama_swap_tar_gz_path = None
+# for f in os.listdir(drop_dir):
+#     if f.startswith('llama-swap') and f.endswith('.tar.gz'):
+#         llama_swap_tar_gz_path = os.path.join(drop_dir, f)
+#         break
+
+# if llama_swap_tar_gz_path:
+#     print(f"Processing {llama_swap_tar_gz_path}...")
+#     with tarfile.open(llama_swap_tar_gz_path, 'r:gz') as tar_ref:
+#         for member in tar_ref.getmembers():
+#             # 3) From the llama-swap*.tar.gz, copy llama-swap to sigma_pikachu/bin
+#             if os.path.basename(member.name) == 'llama-swap':
+#                 source_path = os.path.join(temp_extract_dir, member.name)
+#                 tar_ref.extract(member, temp_extract_dir)
+#                 destination_path = os.path.join(bin_dir, 'llama-swap')
+#                 if os.path.exists(destination_path):
+#                     os.remove(destination_path)
+#                     print(f"Overwriting existing file: {destination_path}")
+#                 shutil.move(source_path, destination_path)
+#                 # Make executable
+#                 os.chmod(destination_path, 0o755)
+#                 print(f"Copied and made executable llama-swap to {bin_dir}")
+# else:
+#     print("No llama-swap*.tar.gz file found in _drop directory.")
 
 # Clean up temporary extraction directory
 if os.path.exists(temp_extract_dir):
