@@ -4,6 +4,7 @@ import sys
 import shlex # For robust command parsing
 import threading # Need RLock reference
 import time
+import logging
 from ..constants import LLAMA_SERVER_LOG_FILE, CONFIG_FILE, LLAMA_SERVER_CONFIG_FILE
 from ..settings.config_manager import config_manager # Singleton instance
 
@@ -11,6 +12,7 @@ class LlamaServerManager:
     def __init__(self, process_manager_instance):
         # Reference to the main ProcessManager instance to access shared state and lock
         self._pm = process_manager_instance
+        self.logger = logging.getLogger(__name__)
 
     def get_python_executable(self):
         """Determines the correct Python executable to use."""
@@ -40,16 +42,16 @@ class LlamaServerManager:
     def start(self):
         with self._pm._lock: # Use the lock from the main ProcessManager
             if self.is_running():
-                print("Llama server is already running.")
+                self.logger.info("Llama server is already running.")
                 return True
 
             if not os.path.exists(CONFIG_FILE): # Check for main config, not specific llama config
-                print(f"Error: {CONFIG_FILE} not found. Cannot start Llama server.")
+                self.logger.error("Error: %s not found. Cannot start Llama server.", CONFIG_FILE)
                 return False
 
             current_config = config_manager.get_config() # Use the singleton
             if not current_config:
-                print(f"Error: Could not load {CONFIG_FILE}. Cannot start Llama server.")
+                self.logger.error("Error: Could not load %s. Cannot start Llama server.", CONFIG_FILE)
                 return False
 
             llama_config = current_config.get("llama", {})
@@ -67,16 +69,16 @@ class LlamaServerManager:
             # If needed, this logic should be added here.
 
             # Use shlex.quote for printing the command to handle spaces/special chars in arguments
-            print(f"Starting Llama server with command: {' '.join(shlex.quote(str(c)) for c in command)}")
+            self.logger.info("Starting Llama server with command: %s", ' '.join(shlex.quote(str(c)) for c in command))
             try:
                 # Ensure log directory exists (though constants.py should do this)
                 os.makedirs(os.path.dirname(LLAMA_SERVER_LOG_FILE), exist_ok=True)
                 with open(LLAMA_SERVER_LOG_FILE, 'a') as log:
                     self._pm.llama_server_process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
-                print(f"Llama server started. PID: {self._pm.llama_server_process.pid}. Logging to {LLAMA_SERVER_LOG_FILE}")
+                self.logger.info("Llama server started. PID: %s. Logging to %s", self._pm.llama_server_process.pid, LLAMA_SERVER_LOG_FILE)
                 return True
             except Exception as e:
-                print(f"Failed to start Llama server: {e}")
+                self.logger.error("Failed to start Llama server: %s", e)
                 self._pm.llama_server_process = None
                 return False
 
@@ -95,18 +97,18 @@ class LlamaServerManager:
                 return True # Already stopped or stopping
 
         if process_to_stop:
-            print(f"Stopping Llama server (PID: {pid_to_log})...")
+            self.logger.info("Stopping Llama server (PID: %s)...", pid_to_log)
             try:
                 process_to_stop.terminate()
                 process_to_stop.wait(timeout=5)
-                print("Llama server terminated.")
+                self.logger.info("Llama server terminated.")
             except subprocess.TimeoutExpired:
-                print("Llama server did not terminate gracefully, killing...")
+                self.logger.warning("Llama server did not terminate gracefully, killing...")
                 process_to_stop.kill()
                 process_to_stop.wait()
-                print("Llama server killed.")
+                self.logger.info("Llama server killed.")
             except Exception as e:
-                print(f"Error stopping Llama server: {e}")
+                self.logger.error("Error stopping Llama server: %s", e)
         else:
-            print("Llama server was already considered stopped or not found for termination.")
+            self.logger.info("Llama server was already considered stopped or not found for termination.")
         return True

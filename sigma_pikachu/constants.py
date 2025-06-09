@@ -34,10 +34,11 @@ if not os.path.exists(USER_CONFIG_DIR):
 
 CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "config.yaml")
 LLAMA_SERVER_LOG_FILE = os.path.join(USER_LOGS_DIR, "server.log")
+MAIN_APP_LOG_FILE = os.path.join(USER_LOGS_DIR, "main.log")
 
 LLAMA_SERVER_CONFIG_FILE = os.path.join(USER_CONFIG_DIR, "llama.cpp-python_config.json")
 
-LLAMA_SWAP_CMD = os.path.join(RESOURCE_DIR, "bin", "corral")
+LLAMA_SWAP_CMD = os.path.join(RESOURCE_DIR, "sigma_pikachu", "bin", "corral")
 
 OLLAMA_CMD = "ollama"
 

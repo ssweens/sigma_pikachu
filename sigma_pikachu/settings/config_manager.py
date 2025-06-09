@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import time # Added for retry delay
+import logging
 from ..constants import CONFIG_FILE, DEFAULT_HOST, DEFAULT_LLAMA_PORT
 
 import requests
@@ -20,20 +21,21 @@ class ConfigManager:
 
     def __init__(self):
         self.config_file_path = CONFIG_FILE
+        self.logger = logging.getLogger(__name__)
         self.config = self._load_config()
 
     def _load_config(self):
         """Loads the server configuration from config.yaml."""
         if not os.path.exists(self.config_file_path):
-            print(f"Error: Configuration file {self.config_file_path} not found.")
+            self.logger.error("Error: Configuration file %s not found.", self.config_file_path)
             # Create a minimal default config if it doesn't exist
             try:
                 with open(self.config_file_path, 'w') as f:
                     yaml.dump(self.DEFAULT_CONFIG, f, sort_keys=False)
-                print(f"Created a default configuration file at {self.config_file_path}")
+                self.logger.info("Created a default configuration file at %s", self.config_file_path)
                 return self.DEFAULT_CONFIG.copy()
             except Exception as e:
-                print(f"Error creating default configuration file: {e}")
+                self.logger.error("Error creating default configuration file: %s", e)
                 return None # Or consider returning self.DEFAULT_CONFIG.copy()
 
 
@@ -41,7 +43,7 @@ class ConfigManager:
             with open(self.config_file_path, 'r') as f:
                 config_data = yaml.safe_load(f)
             if config_data is None: # Handle empty or invalid YAML
-                print(f"Warning: {self.config_file_path} is empty or invalid. Using defaults.")
+                self.logger.warning("Warning: %s is empty or invalid. Using defaults.", self.config_file_path)
                 return self.DEFAULT_CONFIG.copy()
             # Convert to JSON and back to ensure consistent object types (e.g., dicts not OrderedDicts)
             # although with safe_load, this is less of an issue.
@@ -49,21 +51,21 @@ class ConfigManager:
         except FileNotFoundError:
             # This case should be handled by the os.path.exists check above,
             # but kept for robustness.
-            print(f"Error: {self.config_file_path} not found (should not happen here).")
+            self.logger.error("Error: %s not found (should not happen here).", self.config_file_path)
             return None
         except yaml.YAMLError as e:
-            print(f"Error parsing YAML in {self.config_file_path}: {e}")
+            self.logger.error("Error parsing YAML in %s: %s", self.config_file_path, e)
             return None
         except Exception as e: # Catch any other loading errors
-            print(f"An unexpected error occurred while loading {self.config_file_path}: {e}")
+            self.logger.error("An unexpected error occurred while loading %s: %s", self.config_file_path, e)
             return None
 
     def reload_config(self):
         """Reloads the configuration from the file."""
-        print("Reloading configuration...")
+        self.logger.info("Reloading configuration...")
         self.config = self._load_config()
         if self.config is None:
-            print("Failed to reload configuration. Previous configuration might still be in use if not overwritten.")
+            self.logger.error("Failed to reload configuration. Previous configuration might still be in use if not overwritten.")
             # Potentially fall back to a known good state or a minimal default
             self.config = self.DEFAULT_CONFIG.copy()
         return self.config is not None
@@ -93,18 +95,18 @@ class ConfigManager:
 
     def get_llama_swap_models(self):
         """
-        Gets the list of Llama-swap models from the configured llama-swap config file.
-        Returns an empty list if llama_swap is not configured or config file cannot be read.
+        Gets the list of corral models from the configured corral config file.
+        Returns an empty list if corral is not configured or config file cannot be read.
         """
         main_config = self.get_config()
-        llama_swap_config_path = main_config.get("llama_swap", {}).get("config_file")
+        llama_swap_config_path = main_config.get("corral", {}).get("config_file")
 
         if not llama_swap_config_path:
-            print("Warning: 'llama_swap.config_file' not specified in config.yaml.")
+            self.logger.warning("Warning: 'corral.config_file' not specified in config.yaml.")
             return []
 
         if not os.path.exists(llama_swap_config_path):
-            print(f"Error: Llama-swap configuration file {llama_swap_config_path} not found.")
+            self.logger.error("Error: corral configuration file %s not found.", llama_swap_config_path)
             return []
 
         try:
@@ -112,25 +114,25 @@ class ConfigManager:
                 llama_swap_config_data = yaml.safe_load(f)
 
         except FileNotFoundError:
-            print(f"Error: Llama-swap configuration file {llama_swap_config_path} not found during read.")
+            self.logger.error("Error: corral configuration file %s not found during read.", llama_swap_config_path)
             return []
         except yaml.YAMLError as e:
-            print(f"Error parsing YAML in {llama_swap_config_path}: {e}")
+            self.logger.error("Error parsing YAML in %s: %s", llama_swap_config_path, e)
             return []
         except Exception as e:
-            print(f"An unexpected error occurred while loading {llama_swap_config_path}: {e}")
+            self.logger.error("An unexpected error occurred while loading %s: %s", llama_swap_config_path, e)
             return []
 
         # If data was loaded successfully, process it
         if llama_swap_config_data is None:
-            print(f"Warning: {llama_swap_config_path} is empty or invalid.")
+            self.logger.warning("Warning: %s is empty or invalid.", llama_swap_config_path)
             return [] # Return empty list for empty/invalid config
 
-        # The 'models' key in llama-swap config is a dictionary, not a list.
+        # The 'models' key in corral config is a dictionary, not a list.
         # We need to extract the keys (model aliases) from this dictionary.
         models_dict = llama_swap_config_data.get("models", {})
         if not isinstance(models_dict, dict):
-             print(f"Warning: 'models' key in {llama_swap_config_path} is not a dictionary.")
+             self.logger.warning("Warning: 'models' key in %s is not a dictionary.", llama_swap_config_path)
              return [] # Return empty list if 'models' is not a dict
 
         # Return a list of model aliases (the keys of the models dictionary)
@@ -186,17 +188,17 @@ class ConfigManager:
                     # Each model object has a "name" field (e.g., "llama2:latest").
                     return [{"model_alias": model["name"]} for model in json_response.get("models", [])]
                 elif r.status_code == 503: # Service Unavailable
-                    print(f"Ollama API at {url} returned status 503 (Attempt {attempt + 1}/{max_retries}). Retrying in {retry_delay_seconds}s...")
+                    self.logger.warning("Ollama API at %s returned status 503 (Attempt %d/%d). Retrying in %ds...", url, attempt + 1, max_retries, retry_delay_seconds)
                 else:
-                    print(f"Ollama API request failed. URL: {url}, Status: {r.status_code}, Response: {r.text[:100]}")
+                    self.logger.error("Ollama API request failed. URL: %s, Status: %s, Response: %s", url, r.status_code, r.text[:100])
                     return [] # Non-retryable error or final attempt failed
             except (RequestException, ConnectionError, TimeoutError) as e:
-                print(f"Could not connect to Ollama server at {url} (Attempt {attempt + 1}/{max_retries}): {e}")
+                self.logger.error("Could not connect to Ollama server at %s (Attempt %d/%d): %s", url, attempt + 1, max_retries, e)
             
             if attempt < max_retries - 1:
                 time.sleep(retry_delay_seconds)
             else:
-                print(f"Failed to fetch Ollama models from {url} after {max_retries} attempts.")
+                self.logger.error("Failed to fetch Ollama models from %s after %d attempts.", url, max_retries)
                 return []
         
         return [] # Should be unreachable if loop logic is correct, but as a fallback.
@@ -211,18 +213,21 @@ def open_config_file_externally(self):
             subprocess.run(["open", self.config_file_path], check=True)
         else: # linux variants
             subprocess.run(["xdg-open", self.config_file_path], check=True)
-        print(f"Opened {self.config_file_path}")
+        self.logger.info("Opened %s", self.config_file_path)
     except Exception as e:
-        print(f"Failed to open {self.config_file_path}: {e}")
+        self.logger.error("Failed to open %s: %s", self.config_file_path, e)
 
 # For direct testing or use as a singleton instance
 config_manager = ConfigManager()
 
 if __name__ == '__main__':
     # Example usage:
-    print("Current config file path:", CONFIG_FILE)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    logger = logging.getLogger(__name__)
+
+    logger.info("Current config file path: %s", CONFIG_FILE)
     if not os.path.exists(CONFIG_FILE):
-        print(f"Config file {CONFIG_FILE} does not exist. Please create it.")
+        logger.info("Config file %s does not exist. Please create it.", CONFIG_FILE)
         # Create a dummy config for testing if it doesn't exist
         dummy_config = {
             "llama": {
@@ -234,15 +239,15 @@ if __name__ == '__main__':
         }
         with open(CONFIG_FILE, 'w') as f:
             yaml.dump(dummy_config, f)
-        print(f"Created dummy config file at {CONFIG_FILE}")
+        logger.info("Created dummy config file at %s", CONFIG_FILE)
         config_manager.reload_config()
 
 
-    print("Llama Server Host/Port:", config_manager.get_llama_host_port())
-    print("Llama Models:", config_manager.get_llama_models())
-    print("MCP Servers:", config_manager.get_mcp_servers())
+    logger.info("Llama Server Host/Port: %s", config_manager.get_llama_host_port())
+    logger.info("Llama Models: %s", config_manager.get_llama_models())
+    logger.info("MCP Servers: %s", config_manager.get_mcp_servers())
     
     # Test reloading (e.g., after manually editing the config.yaml)
     # input("Edit config.yaml and press Enter to reload and see changes...")
     # config_manager.reload_config()
-    # print("Reloaded MCP Servers:", config_manager.get_mcp_servers())
+    # logger.info("Reloaded MCP Servers: %s", config_manager.get_mcp_servers())

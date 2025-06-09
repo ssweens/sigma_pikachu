@@ -1,1 +1,1 @@
-python -m PyInstaller --name "sigma_pikachu" --onefile --windowed --icon "sigma_pikachu.png" --add-data "sigma_pikachu/pik64x64w.png:." sigma_pikachu/main.py
+python -m PyInstaller -y --name "sigma_pikachu" --onefile --windowed --icon "sigma_pikachu.png" --add-data "sigma_pikachu/pik64x64w.png:." --add-data "sigma_pikachu/bin:sigma_pikachu/bin" --add-data "sigma_pikachu/lib:sigma_pikachu/lib" sigma_pikachu/main.py

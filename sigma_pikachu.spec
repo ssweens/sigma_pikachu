@@ -5,7 +5,7 @@ a = Analysis(
     ['sigma_pikachu/main.py'],
     pathex=[],
     binaries=[],
-    datas=[('sigma_pikachu/pik64x64w.png', '.')],
+    datas=[('sigma_pikachu/pik64x64w.png', '.'), ('sigma_pikachu/bin', 'sigma_pikachu/bin'), ('sigma_pikachu/lib', 'sigma_pikachu/lib')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

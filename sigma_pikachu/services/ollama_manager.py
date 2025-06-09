@@ -4,6 +4,7 @@ import sys
 import shlex # For robust command parsing
 import threading # Need RLock reference
 import time
+import logging
 from ..constants import LLAMA_SERVER_LOG_FILE, CONFIG_FILE, OLLAMA_CMD # Reusing log file for now
 from ..settings.config_manager import config_manager # Singleton instance
 
@@ -23,6 +24,7 @@ class OllamaManager:
     def __init__(self, process_manager_instance):
         # Reference to the main ProcessManager instance to access shared state and lock
         self._pm = process_manager_instance
+        self.logger = logging.getLogger(__name__)
 
     def is_running(self):
         with self._pm._lock: # Use the lock from the main ProcessManager
@@ -32,16 +34,16 @@ class OllamaManager:
     def start(self):
         with self._pm._lock:
             if self.is_running():
-                print("Ollama server is already running.")
+                self.logger.info("Ollama server is already running.")
                 return True
 
             if not os.path.exists(CONFIG_FILE):
-                print(f"Error: {CONFIG_FILE} not found. Cannot start Ollama server.")
+                self.logger.error("Error: %s not found. Cannot start Ollama server.", CONFIG_FILE)
                 return False
 
             current_config = config_manager.get_config()
             if not current_config:
-                print(f"Error: Could not load {CONFIG_FILE}. Cannot start Ollama server.")
+                self.logger.error("Error: Could not load %s. Cannot start Ollama server.", CONFIG_FILE)
                 return False
 
             ollama_config_path = current_config.get("ollama", {}).get("config_file", "config.yaml")
@@ -61,7 +63,7 @@ class OllamaManager:
             env = os.environ.copy()
             env.update(OLLAMA_ENV)
 
-            print(f"Starting Ollama server with command: {' '.join(shlex.quote(str(c)) for c in command)}")
+            self.logger.info("Starting Ollama server with command: %s", ' '.join(shlex.quote(str(c)) for c in command))
             try:
                 os.makedirs(os.path.dirname(LLAMA_SERVER_LOG_FILE), exist_ok=True)
                 with open(LLAMA_SERVER_LOG_FILE, 'a') as log:
@@ -71,14 +73,14 @@ class OllamaManager:
                         stderr=subprocess.STDOUT,
                         env=env  # Pass the environment
                     )
-                print(f"Ollama server started. PID: {self._pm.ollama_process.pid}. Logging to {LLAMA_SERVER_LOG_FILE}")
+                self.logger.info("Ollama server started. PID: %s. Logging to %s", self._pm.ollama_process.pid, LLAMA_SERVER_LOG_FILE)
                 return True
             except FileNotFoundError:
-                print(f"Error: 'ollama' command not found. Is ollama installed and in your PATH?")
+                self.logger.error("Error: 'ollama' command not found. Is ollama installed and in your PATH?")
                 self._pm.ollama_process = None
                 return False
             except Exception as e:
-                print(f"Failed to start Ollama server: {e}")
+                self.logger.error("Failed to start Ollama server: %s", e)
                 self._pm.ollama_process = None
                 return False
 
@@ -98,18 +100,18 @@ class OllamaManager:
                 return True # Already stopped or stopping
 
         if process_to_stop:
-            print(f"Stopping Ollama server (PID: {pid_to_log})...")
+            self.logger.info("Stopping Ollama server (PID: %s)...", pid_to_log)
             try:
                 process_to_stop.terminate()
                 process_to_stop.wait(timeout=5)
-                print("Ollama server terminated.")
+                self.logger.info("Ollama server terminated.")
             except subprocess.TimeoutExpired:
-                print("Ollama server did not terminate gracefully, killing...")
+                self.logger.warning("Ollama server did not terminate gracefully, killing...")
                 process_to_stop.kill()
                 process_to_stop.wait()
-                print("Ollama server killed.")
+                self.logger.info("Ollama server killed.")
             except Exception as e:
-                print(f"Error stopping Ollama server: {e}")
+                self.logger.error("Error stopping Ollama server: %s", e)
         else:
-            print("Ollama server was already considered stopped or not found for termination.")
+            self.logger.info("Ollama server was already considered stopped or not found for termination.")
         return True

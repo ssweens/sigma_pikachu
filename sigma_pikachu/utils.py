@@ -1,7 +1,10 @@
 import os
 import sys
 import subprocess
-from .constants import LLAMA_SERVER_LOG_FILE, MCP_LOGS_DIR
+import logging
+from .constants import LLAMA_SERVER_LOG_FILE, MCP_LOGS_DIR, MAIN_APP_LOG_FILE
+
+logger = logging.getLogger(__name__)
 
 def open_file_externally(file_path):
     """Opens the specified file using the system's default application."""
@@ -12,9 +15,9 @@ def open_file_externally(file_path):
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 with open(file_path, 'w') as f:
                     f.write(f"Log file created at {file_path}.\n")
-                print(f"Created empty log file: {file_path}")
+                logger.info("Created empty log file: %s", file_path)
             else:
-                print(f"Error: File not found at {file_path}")
+                logger.error("Error: File not found at %s", file_path)
                 return
 
         if sys.platform == "win32":
@@ -47,20 +50,24 @@ def open_file_externally(file_path):
                     ], check=True)
                 except FileNotFoundError:
                     # Fallback if x-terminal-emulator is not found or fails
-                    print(f"Could not open terminal with tail for {file_path}. Opening with xdg-open.")
+                    logger.warning("Could not open terminal with tail for %s. Opening with xdg-open.", file_path)
                     subprocess.run(["xdg-open", file_path], check=True)
                 except Exception as e:
-                    print(f"Failed to open terminal with tail for {file_path}: {e}. Opening with xdg-open.")
+                    logger.warning("Failed to open terminal with tail for %s: %s. Opening with xdg-open.", file_path, e)
                     subprocess.run(["xdg-open", file_path], check=True)
             else:
                 subprocess.run(["xdg-open", file_path], check=True)
-        print(f"Opened {file_path}")
+        logger.info("Opened %s", file_path)
     except Exception as e:
-        print(f"Failed to open {file_path}: {e}")
+        logger.error("Failed to open %s: %s", file_path, e)
 
 def view_llama_server_logs():
     """Opens the main Llama server log file."""
     open_file_externally(LLAMA_SERVER_LOG_FILE)
+
+def view_main_app_logs():
+    """Opens the main application log file."""
+    open_file_externally(MAIN_APP_LOG_FILE)
 
 def view_mcp_server_log(alias):
     """Opens the log file for a specific MCP server."""
@@ -72,13 +79,13 @@ def view_mcp_logs_directory():
     """Opens the directory containing all MCP server logs."""
     if not os.path.exists(MCP_LOGS_DIR):
         os.makedirs(MCP_LOGS_DIR, exist_ok=True)
-        print(f"Created MCP logs directory: {MCP_LOGS_DIR}")
+        logger.info("Created MCP logs directory: %s", MCP_LOGS_DIR)
     
     open_file_externally(MCP_LOGS_DIR)
 
 if __name__ == '__main__':
     # Basic test for utility functions
-    print("Utils Test")
+    logger.info("Utils Test")
     # Ensure dummy log files and directories exist for testing
     if not os.path.exists(LLAMA_SERVER_LOG_FILE):
         os.makedirs(os.path.dirname(LLAMA_SERVER_LOG_FILE), exist_ok=True)
@@ -91,13 +98,13 @@ if __name__ == '__main__':
     with open(dummy_mcp_log_path, 'w') as f:
         f.write(f"Dummy MCP log for {dummy_mcp_alias}.\n")
 
-    print(f"Attempting to open Llama log: {LLAMA_SERVER_LOG_FILE}")
+    logger.info("Attempting to open Llama log: %s", LLAMA_SERVER_LOG_FILE)
     # view_llama_server_logs() # This would open the file
 
-    print(f"Attempting to open MCP log for '{dummy_mcp_alias}': {dummy_mcp_log_path}")
+    logger.info("Attempting to open MCP log for '%s': %s", dummy_mcp_alias, dummy_mcp_log_path)
     # view_mcp_server_log(dummy_mcp_alias) # This would open the file
     
-    print(f"Attempting to open MCP logs directory: {MCP_LOGS_DIR}")
+    logger.info("Attempting to open MCP logs directory: %s", MCP_LOGS_DIR)
     # view_mcp_logs_directory() # This would open the directory
 
-    print("Utils test finished. Check if files/directories opened (if uncommented).")
+    logger.info("Utils test finished. Check if files/directories opened (if uncommented).")
