@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="300" height="300" fill="#1a1a1a" rx="20" ry="20"/>
+  
+  <!-- Sigma Symbol Stylized Glow -->
+  <path d="M150 280 L90 50 L210 50 L150 280" fill="none" stroke="#ffcc00" stroke-width="2" opacity="0.5">
+    <animate attributeName="opacity" values="0.3;0.8;0.3" dur="4s" repeatCount="indefinite" />
+  </path>
+  
+  <!-- Pikachu Body -->
+  <ellipse cx="150" cy="150" rx="85" ry="90" fill="#ffcc00"/>
+  
+  <!-- Ears -->
+  <path d="M100 80 L80 20 L110 70 Z" fill="#ffcc00" stroke="#000" stroke-width="2"/>
+  <path d="M200 80 L220 20 L190 70 Z" fill="#ffcc00" stroke="#000" stroke-width="2"/>
+  <path d="M80 20 L95 45 Z" fill="#000" stroke="#000" stroke-width="2"/>
+  <path d="M220 20 L205 45 Z" fill="#000" stroke="#000" stroke-width="2"/>
+  
+  <!-- Face -->
+  <circle cx="130" cy="130" r="10" fill="#000"/> <!-- Left eye -->
+  <circle cx="170" cy="130" r="10" fill="#000"/> <!-- Right eye -->
+  
+  <!-- Sunglasses (sigma style) -->
+  <path d="M110 123 L190 123" stroke="#333" stroke-width="5"/> <!-- Bridge -->
+  <path d="M110 123 Q120 113 130 123 Q140 133 110 123 Z" fill="#333"/> <!-- Left lens -->
+  <path d="M190 123 Q180 113 170 123 Q160 133 190 123 Z" fill="#333"/> <!-- Right lens -->
+  
+  <!-- Smirk/Mouth -->
+  <path d="M130 160 Q150 170 170 160" stroke="#000" stroke-width="3" fill="none"/>
+  
+  <!-- Cheeks -->
+  <circle cx="100" cy="155" r="10" fill="#ff6666" opacity="0.8"/>
+  <circle cx="200" cy="155" r="10" fill="#ff6666" opacity="0.8"/>
+  
+  <!-- Tail -->
+  <path d="M230 140 L250 130 L270 90 L250 70 L260 50 L240 60 L220 120 Z" fill="#ffcc00" stroke="#000" stroke-width="2"/>
+  <path d="M240 60 L250 70 L230 100 Z" fill="#ffcc00" stroke="#000" stroke-width="2"/>
+  
+  <!-- Sigma Symbol -->
+  <path d="M135 200 L165 200 L165 210 L145 230 L165 230 L165 240 L135 240 L135 230 L155 210 L135 210 Z" fill="#333" stroke="#000" stroke-width="1"/>
+  
+  <!-- Subtle Glow Effect -->
+  <circle cx="150" cy="150" r="100" fill="url(#glow)" opacity="0.3"/>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#ffcc00" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#ffcc00" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>
