@@ -22,8 +22,9 @@ class ProcessManager:
     def __init__(self):
         self.llama_server_process = None
         self.llama_swap_process = None # Add process reference for corral
+        self.toolshed_process = None # Add process reference for toolshed MCP gateway
         self.ollama_process = None
-        self.mcp_server_processes = {} # Stores {'alias': Popen_object}
+        self.mcp_server_processes = {} # Stores {'alias': Popen_object} - DEPRECATED for toolshed
         self.proxy_server = None # To hold the asyncio server instance
         self._proxy_loop = None # To hold the asyncio event loop for the proxy
         self._proxy_thread = None # To run the proxy's asyncio loop in a separate thread
@@ -46,8 +47,9 @@ class ProcessManager:
         # Keep track of previous states to detect changes
         self._prev_llama_server_running = False
         self._prev_llama_swap_running = False
+        self._prev_toolshed_running = False
         self._prev_ollama_server_running = False
-        self._prev_mcp_server_running_states = {} # {'alias': bool}
+        self._prev_mcp_server_running_states = {} # {'alias': bool} - DEPRECATED for toolshed
 
         # Callback for UI updates, set after initialization
         self._ui_update_callback = None
@@ -86,17 +88,21 @@ class ProcessManager:
     def stop_ollama_server(self):
         return self.ollama_manager.stop()
 
-    # --- MCP Server Management ---
-    def is_mcp_server_running(self, alias):
-        return self.mcp_manager.is_running(alias)
+    # --- MCP Server Management (Unified Toolshed Gateway) ---
+    def is_mcp_server_running(self, alias=None):
+        """Check if MCP gateway is running. alias parameter kept for backward compatibility."""
+        return self.mcp_manager.is_running()
 
-    def start_mcp_server(self, mcp_config_entry):
-        return self.mcp_manager.start(mcp_config_entry)
+    def start_mcp_server(self, mcp_config_entry=None):
+        """Start MCP gateway. mcp_config_entry parameter kept for backward compatibility."""
+        return self.mcp_manager.start()
 
-    def stop_mcp_server(self, alias):
-        return self.mcp_manager.stop(alias)
+    def stop_mcp_server(self, alias=None):
+        """Stop MCP gateway. alias parameter kept for backward compatibility."""
+        return self.mcp_manager.stop()
 
     def stop_all_mcp_servers(self):
+        """Stop all MCP services (unified gateway)."""
         return self.mcp_manager.stop_all()
 
     # --- Proxy Server Management ---
@@ -135,11 +141,13 @@ class ProcessManager:
             self.logger.warning("Warning: Unknown server_type '%s' in config.yaml. Not starting a model server.", server_type)
 
 
-        # Start enabled MCP servers
+        # Start enabled MCP servers (unified toolshed gateway)
         mcp_configs = config_manager.get_mcp_servers()
         if mcp_configs:
-            for mcp_cfg in mcp_configs:
-                self.mcp_manager.start(mcp_cfg)
+            # Check if any MCP server is enabled before starting the gateway
+            enabled_mcp_found = any(mcp_cfg.get("enabled", False) for mcp_cfg in mcp_configs)
+            if enabled_mcp_found:
+                self.mcp_manager.start()
 
         # Start the proxy server if enabled in config
         proxy_config = current_config.get("proxy", {})
@@ -238,29 +246,12 @@ class ProcessManager:
                 self.logger.info("ProcessMonitor: Ollama server state changed to %s. Requesting UI update.", current_ollama_server_running)
                 ui_update_needed = True
                 self._prev_ollama_server_running = current_ollama_server_running
-            # Check MCP Servers
-            current_mcp_server_running_states = {}
-            with self._lock: # Lock when accessing mcp_server_processes
-                for alias, process in self.mcp_server_processes.items():
-                    current_mcp_server_running_states[alias] = process is not None and process.poll() is None
-
-            # Detect changes in MCP server states
-            # Check for newly stopped processes
-            for alias, was_running in self._prev_mcp_server_running_states.items():
-                is_running = current_mcp_server_running_states.get(alias, False) # Assume stopped if not in current list
-                if was_running and not is_running:
-                    self.logger.info("ProcessMonitor: MCP server '%s' state changed to Stopped. Requesting UI update.", alias)
-                    ui_update_needed = True
-
-            # Check for newly started processes (less likely to be missed by explicit start, but good for robustness)
-            for alias, is_running in current_mcp_server_running_states.items():
-                 was_running = self._prev_mcp_server_running_states.get(alias, False)
-                 if not was_running and is_running:
-                     self.logger.info("ProcessMonitor: MCP server '%s' state changed to Running. Requesting UI update.", alias)
-                     ui_update_needed = True
-
-
-            self._prev_mcp_server_running_states = current_mcp_server_running_states # Update previous state
+            # Check Toolshed MCP Gateway
+            current_toolshed_running = self.is_mcp_server_running()
+            if current_toolshed_running != self._prev_toolshed_running:
+                self.logger.info("ProcessMonitor: Toolshed MCP Gateway state changed to %s. Requesting UI update.", current_toolshed_running)
+                ui_update_needed = True
+                self._prev_toolshed_running = current_toolshed_running
 
             # Trigger UI update if needed
             if ui_update_needed and self._ui_update_callback:

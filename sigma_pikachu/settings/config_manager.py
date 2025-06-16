@@ -8,6 +8,15 @@ import logging
 from ..constants import CONFIG_FILE, DEFAULT_HOST, DEFAULT_LLAMA_PORT
 
 import requests
+try:
+    import tomli
+except ImportError:
+    tomli = None
+
+try:
+    import jinja2
+except ImportError:
+    jinja2 = None
 
 class ConfigManager:
     DEFAULT_CONFIG = {
@@ -95,7 +104,7 @@ class ConfigManager:
 
     def get_llama_swap_models(self):
         """
-        Gets the list of corral models from the configured corral config file.
+        Gets the list of corral models from the configured corral config file (TOML format).
         Returns an empty list if corral is not configured or config file cannot be read.
         """
         main_config = self.get_config()
@@ -109,15 +118,36 @@ class ConfigManager:
             self.logger.error("Error: corral configuration file %s not found.", llama_swap_config_path)
             return []
 
+        # Check if tomli is available
+        if tomli is None:
+            self.logger.error("Error: tomli library not available for parsing TOML files.")
+            return []
+
         try:
-            with open(llama_swap_config_path, 'r') as f:
-                llama_swap_config_data = yaml.safe_load(f)
+            # Read the file as text first to handle Jinja2 templates
+            with open(llama_swap_config_path, 'r', encoding='utf-8') as f:
+                raw_content = f.read()
+            
+            # Check if the file contains Jinja2 templates
+            if jinja2 is not None and ('{{' in raw_content or '{%' in raw_content):
+                # Process Jinja2 templates
+                try:
+                    template = jinja2.Template(raw_content)
+                    processed_content = template.render()
+                    # Parse the processed content as TOML
+                    llama_swap_config_data = tomli.loads(processed_content)
+                except jinja2.TemplateError as e:
+                    self.logger.error("Error processing Jinja2 templates in %s: %s", llama_swap_config_path, e)
+                    return []
+            else:
+                # Parse directly as TOML
+                llama_swap_config_data = tomli.loads(raw_content)
 
         except FileNotFoundError:
             self.logger.error("Error: corral configuration file %s not found during read.", llama_swap_config_path)
             return []
-        except yaml.YAMLError as e:
-            self.logger.error("Error parsing YAML in %s: %s", llama_swap_config_path, e)
+        except tomli.TOMLDecodeError as e:
+            self.logger.error("Error parsing TOML in %s: %s", llama_swap_config_path, e)
             return []
         except Exception as e:
             self.logger.error("An unexpected error occurred while loading %s: %s", llama_swap_config_path, e)
@@ -128,7 +158,7 @@ class ConfigManager:
             self.logger.warning("Warning: %s is empty or invalid.", llama_swap_config_path)
             return [] # Return empty list for empty/invalid config
 
-        # The 'models' key in corral config is a dictionary, not a list.
+        # The 'models' key in corral TOML config is a dictionary of model configurations.
         # We need to extract the keys (model aliases) from this dictionary.
         models_dict = llama_swap_config_data.get("models", {})
         if not isinstance(models_dict, dict):

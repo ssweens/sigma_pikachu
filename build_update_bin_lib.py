@@ -168,7 +168,8 @@ print("\n--- Executable Versions ---")
 
 executables_to_check = {
     "llama-server": os.path.join(bin_dir, 'llama-server'),
-    "llama-swap": os.path.join(bin_dir, 'llama-swap'),
+    "corral": os.path.join(bin_dir, 'corral'),
+    "toolshed": os.path.join(bin_dir, 'toolshed'),
     "ollama": os.path.join(bin_dir, 'ollama')
 }
 

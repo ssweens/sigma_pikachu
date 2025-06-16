@@ -4,7 +4,7 @@ import shlex # For robust command parsing
 import threading # Need RLock reference
 import time
 import logging
-from ..constants import MCP_LOGS_DIR
+from ..constants import MCP_LOGS_DIR, CONFIG_FILE, TOOLSHED_CMD
 from ..settings.config_manager import config_manager # Singleton instance
 
 class McpServerManager:
@@ -13,100 +13,87 @@ class McpServerManager:
         self._pm = process_manager_instance
         self.logger = logging.getLogger(__name__)
 
-    def is_running(self, alias):
+    def is_running(self):
         with self._pm._lock: # Use the lock from the main ProcessManager
-            process = self._pm.mcp_server_processes.get(alias)
-            return process is not None and process.poll() is None
+            # Following LlamaSwapManager pattern - single process management
+            return self._pm.toolshed_process is not None and self._pm.toolshed_process.poll() is None
 
-    def start(self, mcp_config_entry):
-        alias = mcp_config_entry.get("alias")
-        command_str = mcp_config_entry.get("command")
-        enabled = mcp_config_entry.get("enabled", False)
-
-        if not alias or not command_str:
-            self.logger.error("MCP Server config missing alias or command: %s", mcp_config_entry)
-            return False
-
-        if not enabled:
-            self.logger.info("MCP Server '%s' is disabled in config. Not starting.", alias)
-            return False # Not an error, but didn't start
-
-        with self._pm._lock:
-            if self.is_running(alias):
-                self.logger.info("MCP Server '%s' is already running.", alias)
+    def start(self):
+        with self._pm._lock: # Use the lock from the main ProcessManager
+            if self.is_running():
+                self.logger.info("Toolshed MCP Gateway is already running.")
                 return True
 
-            # Ensure MCP logs directory exists
-            os.makedirs(MCP_LOGS_DIR, exist_ok=True)
-            log_file_path = os.path.join(MCP_LOGS_DIR, f"mcp_{alias.replace(' ', '_')}.log")
-
-            # Parse command string safely
-            try:
-                command_list = shlex.split(command_str)
-            except Exception as e:
-                self.logger.error("Error parsing command for MCP server '%s': %s. Error: %s", alias, command_str, e)
+            if not os.path.exists(CONFIG_FILE): # Check for main config
+                self.logger.error("Error: %s not found. Cannot start Toolshed MCP Gateway.", CONFIG_FILE)
                 return False
 
-            self.logger.info("Starting MCP Server '%s' with command: %s", alias, command_str)
+            current_config = config_manager.get_config() # Use the singleton
+            if not current_config:
+                self.logger.error("Error: Could not load %s. Cannot start Toolshed MCP Gateway.", CONFIG_FILE)
+                return False
+
+            # Build command like LlamaSwapManager does - directly in code
+            # Use the toolshed config path from user's home directory
+            toolshed_config_path = os.path.expanduser("~/.config/toolshed/config.yaml")
+
+            command = [
+                TOOLSHED_CMD, # Use the full path to toolshed
+                "--config", toolshed_config_path
+            ]
+
+            # Use shlex.quote for printing the command to handle spaces/special chars in arguments
+            self.logger.info("Starting Toolshed MCP Gateway with command: %s", ' '.join(shlex.quote(str(c)) for c in command))
+            
             try:
+                # Ensure log directory exists
+                log_file_path = os.path.join(MCP_LOGS_DIR, "toolshed_gateway.log")
+                os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
                 with open(log_file_path, 'a') as log:
-                    process = subprocess.Popen(command_list, stdout=log, stderr=subprocess.STDOUT)
-                self._pm.mcp_server_processes[alias] = process
-                self.logger.info("MCP Server '%s' started. PID: %s. Logging to %s", alias, process.pid, log_file_path)
+                    # Pass the current environment to ensure the PATH is correctly used
+                    self._pm.toolshed_process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=os.environ)
+                self.logger.info("Toolshed MCP Gateway started. PID: %s. Logging to %s", self._pm.toolshed_process.pid, log_file_path)
                 return True
+            except FileNotFoundError:
+                 self.logger.error("Error: 'toolshed' command not found. Is toolshed binary present at %s?", TOOLSHED_CMD)
+                 self._pm.toolshed_process = None
+                 return False
             except Exception as e:
-                self.logger.error("Failed to start MCP server '%s': %s", alias, e)
-                if alias in self._pm.mcp_server_processes: # Clean up if entry was made
-                    del self._pm.mcp_server_processes[alias]
+                self.logger.error("Failed to start Toolshed MCP Gateway: %s", e)
+                self._pm.toolshed_process = None
                 return False
 
-    def stop(self, alias):
+    def stop(self):
         process_to_stop = None
         pid_to_log = None
 
         with self._pm._lock: # Lock to safely access/modify shared state
-            if self.is_running(alias):
-                process_to_stop = self._pm.mcp_server_processes.get(alias)
-                if process_to_stop: # Should be true if is_running was true
+            if self.is_running():
+                process_to_stop = self._pm.toolshed_process
+                if process_to_stop: # Should always be true if is_running was true
                     pid_to_log = process_to_stop.pid
-                # Remove from dict immediately while under lock
-                if alias in self._pm.mcp_server_processes:
-                    del self._pm.mcp_server_processes[alias]
+                self._pm.toolshed_process = None # Mark as stopping/stopped
             else:
-                # print(f"MCP Server '{alias}' is not running (or already marked as stopped).")
-                # Ensure it's removed if somehow still in dict but not running
-                if alias in self._pm.mcp_server_processes:
-                    del self._pm.mcp_server_processes[alias]
                 return True # Already stopped or stopping
 
         if process_to_stop:
-            self.logger.info("Stopping MCP Server '%s' (PID: %s)...", alias, pid_to_log)
+            self.logger.info("Stopping Toolshed MCP Gateway (PID: %s)...", pid_to_log)
             try:
                 process_to_stop.terminate()
                 process_to_stop.wait(timeout=5)
-                self.logger.info("MCP Server '%s' terminated.", alias)
+                self.logger.info("Toolshed MCP Gateway terminated.")
             except subprocess.TimeoutExpired:
-                self.logger.warning("MCP Server '%s' did not terminate gracefully, killing...", alias)
+                self.logger.warning("Toolshed MCP Gateway did not terminate gracefully, killing...")
                 process_to_stop.kill()
                 process_to_stop.wait()
-                self.logger.info("MCP Server '%s' killed.", alias)
+                self.logger.info("Toolshed MCP Gateway killed.")
             except Exception as e:
-                self.logger.error("Error stopping MCP server '%s': %s", alias, e)
+                self.logger.error("Error stopping Toolshed MCP Gateway: %s", e)
         else:
-            self.logger.info("MCP Server '%s' was already considered stopped or not found for termination.", alias)
+            self.logger.info("Toolshed MCP Gateway was already considered stopped or not found for termination.")
         return True
 
     def stop_all(self):
-        # Get a list of aliases to stop outside the main loop of stopping
-        aliases_to_stop = []
-        with self._pm._lock:
-            aliases_to_stop = list(self._pm.mcp_server_processes.keys())
-
-        if not aliases_to_stop:
-            self.logger.info("No running MCP servers to stop.")
-            return
-
-        self.logger.info("Stopping MCP servers: %s...", ', '.join(aliases_to_stop))
-        for alias in aliases_to_stop:
-            self.stop(alias) # This method now handles its own locking correctly
-        self.logger.info("All MCP servers stop sequence completed for specified aliases.")
+        """Stop all MCP services (unified gateway)."""
+        self.logger.info("Stopping all MCP services (Toolshed Gateway)...")
+        return self.stop()
