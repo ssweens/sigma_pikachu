@@ -47,19 +47,19 @@ for model in pathlib.Path(MODELS_DIR).rglob("*.gguf"):
 
 pprint.pprint(MODELS_TO_TEST)
 
-MODELS_TO_TEST = [
+MODELS_TO_TEST = []
 #     'TheDrummer_Big-Alice-28B-v1-Q4_K_M.gguf',
 # 'DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf',
 # 'Dolphin3.0-Llama3.1-8B-Q4_K_M.gguf',
 #'Dolphin-Mistral-24B-Venice-Edition.i1-Q4_K_M.gguf',
 
 
-'DeepSeek-V2-Lite-Chat.Q4_K_M.gguf',
-'DeepSeek-V2-Lite.Q4_K_M.gguf',
-'DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf',
-'deepseek-v2-lite-q6_k.gguf',
-#'DeepSeek-V2-Lite-Chat-Uncensored-Unbiased-Reasoner.Q4_K_M.gguf',
-'DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf',
+# 'DeepSeek-V2-Lite-Chat.Q4_K_M.gguf',
+# 'DeepSeek-V2-Lite.Q4_K_M.gguf',
+# 'DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf',
+# 'deepseek-v2-lite-q6_k.gguf',
+# #'DeepSeek-V2-Lite-Chat-Uncensored-Unbiased-Reasoner.Q4_K_M.gguf',
+# 'DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf',
 
 
 #'gemma3-12b-claude-3.7-sonnet-reasoning-distilled.Q8_0.gguf',
@@ -109,7 +109,7 @@ MODELS_TO_TEST = [
 #  'qwen3/Qwen3-1.7B-BF16.gguf',
 #  'qwen3/Qwen3-30B-A3B-Q4_K_M.gguf',
 #  'vision/Devstral-Small-2505-Q4_K_M.gguf']
-]
+# ]
 
 # List of OpenAI-compatible models to test
 API_MODELS_TO_TEST = [
@@ -121,18 +121,30 @@ API_MODELS_TO_TEST = [
     # "llama3", # Example for local OpenAI-compatible server like Ollama
 ]
 
+MODELS_TO_TEST = []
+
 # List of MLX models to test (requires mlx_lm package)
 MLX_MODELS_TO_TEST = [
     #"mlx-community/Dolphin3.0-Llama3.1-8B-4bit",
     #"mlx-community/DeepSeek-R1-0528-Qwen3-8B-4bit-AWQ",
-    #"mlx-community/Qwen3-30B-A3B-4bit"
-    #"mlx-community/OpenThinker3-7B-4bit"
+    "mlx-community/Qwen3-30B-A3B-4bit",  # 150 s
+    "mlx-community/OpenThinker3-7B-4bit", # 119s
     #"mlx-community/Qwen2.5-3B-Instruct-4bit",
     #"mlx-community/Qwen2.5-7B-Instruct-4bit",
-    "mlx-community/DeepSeek-V2-Lite-Chat-4bit-mlx",
-    "mlx-community/DeepSeek-R1-Distill-Llama-8B-4bit",
-    "mlx-community/Llama-3.2-3B-Instruct-4bit",
-    "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit-mlx",
+    # "mlx-community/gemma-3n-E4B-it-bf16",  # Not working in mlx_lm atm
+    #"mlx-community/QwQ-32B-4bit",  # Too big 
+    #"mlx-community/Qwen3-14B-4bit-DWQ-053125",  # 260 s... thinking??
+    "mlx-community/Kimi-VL-A3B-Thinking-4bit",  # 68s!
+    #"mlx-community/QwQ-DeepSeek-R1-SkyT1-Flash-Lightest-32B-mlx-4Bit",  # Too big
+    "mlx-community/AceReason-Nemotron-14B-4bit",  # 263 s
+    "mlx-community/gemma-3-27b-it-qat-4bit", # Super slow, 400+ seconds
+    # "mlx-community/Mistral-Nemo-Instruct-2407-4bit",  # 149.116224527359 s
+    "mlx-community/Qwen3-14B-4bit-AWQ",  #255.52090203762054 s thinking, 
+    #"mlx-community/Qwen3-30B-A3B-4bit"
+    # "mlx-community/DeepSeek-V2-Lite-Chat-4bit-mlx",  #55.79968845844269 s
+    # "mlx-community/DeepSeek-R1-Distill-Llama-8B-4bit",  # 90.80711543560028 s
+    # "mlx-community/Llama-3.2-3B-Instruct-4bit",  # 47.81926929950714 s
+    # "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit-mlx",  #76.93342363834381 s
     # Add more MLX models here
 ]
 
@@ -432,8 +444,8 @@ def benchmark_mlx_model(model_name, prompt_content, n_predict=N_PREDICT):
         
         try:
             # Build the MLX command - read prompt from the existing file to avoid shell quoting issues
-            mlx_cmd = f"python -m mlx_lm generate --model {model_name} --prompt \"$(cat tools/sample_reddit_prompt.md)\" --max-tokens {n_predict} --temp 0.5 --kv-bits 8"
-            
+            mlx_cmd = f"python -m mlx_lm generate --model {model_name} --prompt \"$(cat tools/sample_reddit_prompt.md)\" --system-prompt \"\\no_think\" --max-tokens {n_predict} --temp 0.5 --kv-bits 8 --chat-template-config '{{\"enable_thinking\":false}}'"
+            print(f"Executing: {mlx_cmd}")
             result = subprocess.run(mlx_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
             output = result.stdout.decode()
             lines = output.strip().split('\n')
