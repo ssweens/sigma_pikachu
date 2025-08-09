@@ -27,4 +27,6 @@ dependencies = [
     "mlx-lm>=0.25.0",
     "tiktoken>=0.9.0",
     "blobfile>=3.0.0",
+    "accelerate>=1.8.1",
+    "asitop>=0.0.24",
 ]

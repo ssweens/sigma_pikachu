@@ -6,6 +6,7 @@ import re
 import time
 from pathlib import Path
 from typing import List
+import requests
 import sys
 import threading
 import os
@@ -16,13 +17,13 @@ import psutil
 N_PREDICT = 1024
 
 # --- OpenAI API Configuration ---
-OPENAI_API_BASE_URL = "http://localhost:9999/v1"  # Example: "https://api.openai.com/v1" or your local API endpoint
+OPENAI_API_BASE_URL = "http://192.168.1.55:9999/v1"  # Example: "https://api.openai.com/v1" or your local API endpoint
 OPENAI_API_KEY = "sk-your-api-key-here"  # Replace with your actual API key
 
-MODELS_DIR = "/Users/ssweens/models" # !!! IMPORTANT: Set your models directory !!!
+MODELS_DIR = "/Volumes/DabbleFiles/Models" # !!! IMPORTANT: Set your models directory !!!
 MODELS_TO_TEST = [] #sorted(set(extract_model_paths_from_config())) # if not MODELS_TO_TEST else MODELS_TO_TEST
 
-os.environ["HF_HOME"] = MODELS_DIR
+os.environ["HF_HOME"] = MODELS_DIR + "/huggingface"
 
 
 # List of local models to test (e.g., Llama-2-7B-Chat.Q4_K_M.gguf)
@@ -45,9 +46,9 @@ for model in pathlib.Path(MODELS_DIR).rglob("*.gguf"):
     relative_path = model.relative_to(MODELS_DIR)
     MODELS_TO_TEST.append(str(relative_path))
 
-pprint.pprint(MODELS_TO_TEST)
 
-MODELS_TO_TEST = []
+
+MODELS_TO_TEST = [
 #     'TheDrummer_Big-Alice-28B-v1-Q4_K_M.gguf',
 # 'DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf',
 # 'Dolphin3.0-Llama3.1-8B-Q4_K_M.gguf',
@@ -109,7 +110,8 @@ MODELS_TO_TEST = []
 #  'qwen3/Qwen3-1.7B-BF16.gguf',
 #  'qwen3/Qwen3-30B-A3B-Q4_K_M.gguf',
 #  'vision/Devstral-Small-2505-Q4_K_M.gguf']
-# ]
+'Qwen3-Coder-30B-A3B-Instruct-UD-Q4_K_XL.gguf'
+]
 
 # List of OpenAI-compatible models to test
 API_MODELS_TO_TEST = [
@@ -119,36 +121,41 @@ API_MODELS_TO_TEST = [
     # "gpt-3.5-turbo",
     # "gpt-4",
     # "llama3", # Example for local OpenAI-compatible server like Ollama
+    "Qwen/Qwen3-Coder-30B-A3B-Instruct"
 ]
-
-MODELS_TO_TEST = []
 
 # List of MLX models to test (requires mlx_lm package)
 MLX_MODELS_TO_TEST = [
-    #"mlx-community/Dolphin3.0-Llama3.1-8B-4bit",
-    #"mlx-community/DeepSeek-R1-0528-Qwen3-8B-4bit-AWQ",
-    "mlx-community/Qwen3-30B-A3B-4bit",  # 150 s
-    "mlx-community/OpenThinker3-7B-4bit", # 119s
-    #"mlx-community/Qwen2.5-3B-Instruct-4bit",
-    #"mlx-community/Qwen2.5-7B-Instruct-4bit",
-    # "mlx-community/gemma-3n-E4B-it-bf16",  # Not working in mlx_lm atm
-    #"mlx-community/QwQ-32B-4bit",  # Too big 
-    #"mlx-community/Qwen3-14B-4bit-DWQ-053125",  # 260 s... thinking??
-    "mlx-community/Kimi-VL-A3B-Thinking-4bit",  # 68s!
-    #"mlx-community/QwQ-DeepSeek-R1-SkyT1-Flash-Lightest-32B-mlx-4Bit",  # Too big
-    "mlx-community/AceReason-Nemotron-14B-4bit",  # 263 s
-    "mlx-community/gemma-3-27b-it-qat-4bit", # Super slow, 400+ seconds
-    # "mlx-community/Mistral-Nemo-Instruct-2407-4bit",  # 149.116224527359 s
-    "mlx-community/Qwen3-14B-4bit-AWQ",  #255.52090203762054 s thinking, 
-    #"mlx-community/Qwen3-30B-A3B-4bit"
-    # "mlx-community/DeepSeek-V2-Lite-Chat-4bit-mlx",  #55.79968845844269 s
-    # "mlx-community/DeepSeek-R1-Distill-Llama-8B-4bit",  # 90.80711543560028 s
-    # "mlx-community/Llama-3.2-3B-Instruct-4bit",  # 47.81926929950714 s
-    # "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit-mlx",  #76.93342363834381 s
-    # Add more MLX models here
+    # #"mlx-community/Dolphin3.0-Llama3.1-8B-4bit",
+    # #"mlx-community/DeepSeek-R1-0528-Qwen3-8B-4bit-AWQ",
+    # "mlx-community/Qwen3-30B-A3B-4bit",  # 150 s
+    # "mlx-community/OpenThinker3-7B-4bit", # 119s
+    # #"mlx-community/Qwen2.5-3B-Instruct-4bit",
+    # #"mlx-community/Qwen2.5-7B-Instruct-4bit",
+    # # "mlx-community/gemma-3n-E4B-it-bf16",  # Not working in mlx_lm atm
+    # #"mlx-community/QwQ-32B-4bit",  # Too big 
+    # #"mlx-community/Qwen3-14B-4bit-DWQ-053125",  # 260 s... thinking??
+    # "mlx-community/Kimi-VL-A3B-Thinking-4bit",  # 68s!
+    # #"mlx-community/QwQ-DeepSeek-R1-SkyT1-Flash-Lightest-32B-mlx-4Bit",  # Too big
+    # "mlx-community/AceReason-Nemotron-14B-4bit",  # 263 s
+    # "mlx-community/gemma-3-27b-it-qat-4bit", # Super slow, 400+ seconds
+    # # "mlx-community/Mistral-Nemo-Instruct-2407-4bit",  # 149.116224527359 s
+    # "mlx-community/Qwen3-14B-4bit-AWQ",  #255.52090203762054 s thinking, 
+    # #"mlx-community/Qwen3-30B-A3B-4bit"
+    # # "mlx-community/DeepSeek-V2-Lite-Chat-4bit-mlx",  #55.79968845844269 s
+    # # "mlx-community/DeepSeek-R1-Distill-Llama-8B-4bit",  # 90.80711543560028 s
+    # # "mlx-community/Llama-3.2-3B-Instruct-4bit",  # 47.81926929950714 s
+    # # "mlx-community/DeepSeek-Coder-V2-Lite-Instruct-4bit-mlx",  #76.93342363834381 s
+    # # Add more MLX models here
+    #"mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ"
+    #"mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit"
+    "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-dwq-v2"
 ]
 
 BENCHMARK_PROMPT = open('tools/sample_reddit_prompt.md', 'r').read()
+
+pprint.pprint(MODELS_TO_TEST)
+pprint.pprint(API_MODELS_TO_TEST)
 
 def bytes2human(n):
     # http://code.activestate.com/recipes/578019
@@ -360,28 +367,55 @@ def benchmark_openai_model(client, api_model_name, prompt_content, n_predict=N_P
     print(f"Running API benchmark for {api_model_name} ...")
 
     print("Running a quick warm-up run to ensure the model is loaded...")
-    response = client.chat.completions.create(
-                model=api_model_name,
-                messages=[{"role": "user", "content": "Tell me a joke."}],
-                max_tokens=128
-            )
+    api_url = f"{OPENAI_API_BASE_URL}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    warmup_payload = {
+        "model": api_model_name,
+        "messages": [{"role": "user", "content": "Tell me a joke."}],
+        "max_tokens": 128
+    }
+    warmup_response = requests.post(api_url, headers=headers, json=warmup_payload)
+    if warmup_response.status_code != 200:
+        raise Exception(f"Warm-up API call failed: {warmup_response.status_code} {warmup_response.text}")
+    warmup_response = warmup_response.json()
     print(f"Warm-up run completed for {api_model_name}.")
     print(f"Starting benchmark runs for {api_model_name} with prompt length {len(prompt_content)}...")
 
     for run in range(n_api_runs):
         start_time = time.time()
         try:
-            response = client.chat.completions.create(
-                model=api_model_name,
-                messages=[{"role": "user", "content": prompt_content}],
-                max_tokens=n_predict,
-                temperature=0.5, # Align with local model temp
-            )
+            
+            api_url = f"{OPENAI_API_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": api_model_name,
+                "messages": [{"role": "user", "content": prompt_content}],
+                "max_tokens": n_predict,
+                "temperature": 0.5,
+                "stream_options": {"include_usage": True},
+                "cache_prompt": False
+            }
+            response = requests.post(api_url, headers=headers, json=payload)
+            if response.status_code != 200:
+                raise Exception(f"API call failed: {response.status_code} {response.text}")
+            response = response.json()
             end_time = time.time()
             total_time = end_time - start_time
 
-            prompt_tokens = response.usage.prompt_tokens
-            completion_tokens = response.usage.completion_tokens
+            print(f"API call completed for {api_model_name} (run {run+1}/{n_api_runs}).")
+            print(f"Response: {response['timings']}")
+            prompt_tokens = response['usage']['prompt_tokens']
+            completion_tokens = response['usage']['completion_tokens']
+            prompt_time = response['timings']['prompt_ms']/1000.0
+            completion_time = response['timings']['predicted_ms']/1000.0
+            prompt_tps = response['timings']['prompt_per_second']
+            completion_tps = response['timings']['predicted_per_second']
 
             ## for output only
             total_tokens_per_second = 0
@@ -389,14 +423,14 @@ def benchmark_openai_model(client, api_model_name, prompt_content, n_predict=N_P
                 total_tokens_per_second = (prompt_tokens + completion_tokens) / total_time
 
             prompt_metrics = {
-                #'time': total_time,
+                'time': prompt_time,
                 'tokens': prompt_tokens,
-                #'tps': prompt_tokens / total_time if total_time > 0 else 0.0
+                'tps': prompt_tps
             }
             generation_metrics = {
-                #'time': total_time,
+                'time': completion_time,
                 'tokens': completion_tokens,
-                #'tps': completion_tokens / total_time if total_time > 0 else 0.0
+                'tps': completion_tps
             }
 
             print(f"\t {api_model_name} API | run {run+1}/{n_api_runs} | Total Time: {round(total_time, 2)}s | Prompt Tokens: {prompt_tokens} | Completion Tokens: {completion_tokens} | Tokens/Sec: {round(total_tokens_per_second, 2)}")
@@ -410,10 +444,14 @@ def benchmark_openai_model(client, api_model_name, prompt_content, n_predict=N_P
             continue
 
     prompt_avg = {
+        'time': sum(d['time'] for d in prompt_metrics_batch) / len(prompt_metrics_batch) if prompt_metrics_batch else 0.0,
         'tokens': sum(d['tokens'] for d in prompt_metrics_batch) / len(prompt_metrics_batch) if prompt_metrics_batch else 0.0,
+        'tps': sum(d['tps'] for d in prompt_metrics_batch) / len(prompt_metrics_batch) if prompt_metrics_batch else 0.0,
     }
     generation_avg = {
+        'time': sum(d['time'] for d in generation_metrics_batch) / len(generation_metrics_batch) if generation_metrics_batch else 0.0,
         'tokens': sum(d['tokens'] for d in generation_metrics_batch) / len(generation_metrics_batch) if generation_metrics_batch else 0.0,
+        'tps': sum(d['tps'] for d in generation_metrics_batch) / len(generation_metrics_batch) if generation_metrics_batch else 0.0,
     }
     total_avg = {
         'time': sum(total_time_batch) / len(total_time_batch) if total_time_batch else 0.0,
@@ -437,7 +475,7 @@ def benchmark_mlx_model(model_name, prompt_content, n_predict=N_PREDICT):
     print(f"Running MLX benchmark for {model_name} ...")
 
     # Ensure the MLX model is downloaded and cached
-    subprocess.run(f"huggingface-cli download {model_name}", shell=True)
+    subprocess.run(f"huggingface-cli download {model_name}", shell=True, env=os.environ)
     
     for run in range(n_mlx_runs):
         start_time = time.time()
@@ -739,11 +777,11 @@ for model, metrics in mlx_model_metrics.items():
 print("\nAPI Models:")
 for model, metrics in api_model_metrics.items():
     print(f"  Model: {model}")
-    print(f"    Prompt - Tokens: {metrics['prompt']['tokens']}")
-    print(f"    Generation - Tokens: {metrics['generation']['tokens']}")
+    print(f"    Prompt - Time: {metrics['prompt']['time']} s, Tokens: {metrics['prompt']['tokens']}, TPS: {metrics['prompt']['tps']}")
+    print(f"    Generation - Time: {metrics['generation']['time']} s, Tokens: {metrics['generation']['tokens']}, TPS: {metrics['generation']['tps']}")
     print(f"    Total - Time: {metrics['total']['time']} s")
     print(f"    Total - TPS: {(metrics['prompt']['tokens'] + metrics['generation']['tokens']) / metrics['total']['time']} tps")
-
+    print(f"    Total - Peak VRAM: N/A (API models do not report VRAM)")
 
 
 
