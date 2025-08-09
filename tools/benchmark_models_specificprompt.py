@@ -110,7 +110,8 @@ MODELS_TO_TEST = [
 #  'qwen3/Qwen3-1.7B-BF16.gguf',
 #  'qwen3/Qwen3-30B-A3B-Q4_K_M.gguf',
 #  'vision/Devstral-Small-2505-Q4_K_M.gguf']
-'Qwen3-Coder-30B-A3B-Instruct-UD-Q4_K_XL.gguf'
+#'Qwen3-Coder-30B-A3B-Instruct-UD-Q4_K_XL.gguf',
+'Devstral-Small-2505-Q4_K_M.gguf',
 ]
 
 # List of OpenAI-compatible models to test
@@ -121,7 +122,8 @@ API_MODELS_TO_TEST = [
     # "gpt-3.5-turbo",
     # "gpt-4",
     # "llama3", # Example for local OpenAI-compatible server like Ollama
-    "Qwen/Qwen3-Coder-30B-A3B-Instruct"
+    #"Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "Devstral-Small-2507"
 ]
 
 # List of MLX models to test (requires mlx_lm package)
@@ -149,7 +151,8 @@ MLX_MODELS_TO_TEST = [
     # # Add more MLX models here
     #"mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ"
     #"mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit"
-    "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-dwq-v2"
+    #"mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-dwq-v2",
+    "lmstudio-community/Devstral-Small-2507-MLX-6bit",
 ]
 
 BENCHMARK_PROMPT = open('tools/sample_reddit_prompt.md', 'r').read()
@@ -351,8 +354,8 @@ cmd = " ".join(cmd_parts)
 # --draft-min 1"
 
 # Defining the number of runs for each evaluation
-n_api_runs = 3  # APIs probably need more runs due to network variability
-n_local_runs = 1  # Local models can be faster, so fewer runs are sufficient
+n_api_runs = 2  # APIs probably need more runs due to network variability
+n_local_runs = 2  # Local models can be faster, so fewer runs are sufficient
 n_mlx_runs = 2  # MLX models similar to local models
 
 # Initialize OpenAI client
@@ -478,7 +481,7 @@ def benchmark_mlx_model(model_name, prompt_content, n_predict=N_PREDICT):
     subprocess.run(f"huggingface-cli download {model_name}", shell=True, env=os.environ)
     
     for run in range(n_mlx_runs):
-        start_time = time.time()
+        #start_time = time.time()
         
         try:
             # Build the MLX command - read prompt from the existing file to avoid shell quoting issues
@@ -488,7 +491,7 @@ def benchmark_mlx_model(model_name, prompt_content, n_predict=N_PREDICT):
             output = result.stdout.decode()
             lines = output.strip().split('\n')
             
-            end_time = time.time()
+            #end_time = time.time()
             
             prompt_tokens = 0
             generation_tokens = 0
@@ -520,8 +523,8 @@ def benchmark_mlx_model(model_name, prompt_content, n_predict=N_PREDICT):
                 for line in lines[-8:]:
                     print(f"  '{line}'")
                 print(f"Debug - Found {prompt_tokens} prompt tokens, {prompt_tps} tps, {generation_tokens} generation tokens, {generation_tps} tps")
-           
-            total_time = end_time - start_time
+
+            total_time = prompt_tokens/prompt_tps + generation_tokens/generation_tps
             print(f"\t {model_name} MLX | run {run+1}/{n_mlx_runs} | total: {total_time} s | prompt: {prompt_tokens} tokens in {prompt_tokens/prompt_tps} s ({prompt_tps} tps) | generation: {generation_tokens} tokens in {generation_tokens/generation_tps} s ({generation_tps} tps)")
 
             prompt_metrics = {
@@ -732,6 +735,59 @@ local_model_metrics = {}
 mlx_model_metrics = {}
 api_model_metrics = {}
 
+# --- Table Output Helper ---
+def print_benchmark_table(local_model_metrics, mlx_model_metrics, api_model_metrics):
+    """Prints a formatted table of benchmark results."""
+    try:
+        from tabulate import tabulate
+        use_tabulate = True
+    except ImportError:
+        use_tabulate = False
+
+    def collect_rows(metrics_dict, model_type):
+        """Helper to collect and format rows for the benchmark table."""
+        rows = []
+        for model, metrics in metrics_dict.items():
+            total_tps = (metrics['prompt']['tokens'] + metrics['generation']['tokens']) / metrics['total']['time'] if metrics['total']['time'] > 0 else 0.0
+            row = {
+                "Type": model_type,
+                "Model": model,
+                "Prompt Time (s)": f"{metrics['prompt']['time']:.2f}",
+                "Prompt Tokens": metrics['prompt']['tokens'],
+                "Prompt TPS": f"{metrics['prompt']['tps']:.2f}",
+                "Gen Time (s)": f"{metrics['generation']['time']:.2f}",
+                "Gen Tokens": metrics['generation']['tokens'],
+                "Gen TPS": f"{metrics['generation']['tps']:.2f}",
+                "Total Time (s)": f"{metrics['total']['time']:.2f}",
+                "Total TPS": f"{total_tps:.2f}",
+                "Peak VRAM (GB)": f"{metrics['total'].get('vram_gb_max', 0.0):.2f}" if model_type != 'API' else 'N/A'
+            }
+            rows.append(row)
+        return rows
+
+    all_rows = []
+    all_rows.extend(collect_rows(local_model_metrics, "Local"))
+    all_rows.extend(collect_rows(mlx_model_metrics, "MLX"))
+    all_rows.extend(collect_rows(api_model_metrics, "API"))
+
+    print("\n--- Benchmark Results Table ---")
+    if not all_rows:
+        print("No benchmark data available.")
+        return
+
+    if use_tabulate:
+        # "pretty" is a good default for console. Other options: "simple", "github", "grid", "fancy_grid"
+        print(tabulate(all_rows, headers="keys", tablefmt="pretty"))
+    else:
+        # Manual formatting fallback
+        headers = list(all_rows[0].keys())
+        col_widths = [max(len(str(row.get(h, ''))) for row in all_rows) for h in headers]
+        header_line = " | ".join(h.ljust(w) for h, w in zip(headers, col_widths))
+        print(header_line)
+        print("-" * len(header_line))
+        for row in all_rows:
+            print(" | ".join(str(row.get(h, '')).ljust(w) for h, w in zip(headers, col_widths)))
+
 # --- Benchmark MLX Models ---
 print("\n--- Benchmarking MLX Models ---")
 for mlx_model in MLX_MODELS_TO_TEST:
@@ -755,6 +811,10 @@ for api_model in API_MODELS_TO_TEST:
 
 # --- Print Summary Results ---
 print("\n--- Benchmark Summary ---")
+
+# --- Print Table Summary ---
+print_benchmark_table(local_model_metrics, mlx_model_metrics, api_model_metrics)
+
 print("\nLocal Models:")
 for model, metrics in local_model_metrics.items():
     print(f"  Model: {model}")
